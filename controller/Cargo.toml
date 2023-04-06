@@ -1,0 +1,9 @@
+[package]
+name = "matter-controller"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+matter = { git = "https://github.com/project-chip/matter-rs", package= "matter-iot", default-features = false, features = ["crypto_rustcrypto"] }

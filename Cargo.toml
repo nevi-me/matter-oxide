@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "controller",
+    "common-ws",
+    "client-ws",
+    "server-ws"
+]
