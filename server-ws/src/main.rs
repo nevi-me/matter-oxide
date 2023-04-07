@@ -10,12 +10,16 @@ use axum::{
     routing::get,
     Extension, Router, Json,
 };
-use common::WsMessage;
-use futures_util::StreamExt;
+use common::{WsMessage, SCHEMA_VERSION};
+use futures_util::{StreamExt, SinkExt};
+use serde_json::json;
+
+use crate::context::MatterContext;
 
 mod device_controller;
 mod server;
 mod storage_controller;
+mod context;
 
 #[tokio::main]
 async fn main() {
@@ -24,11 +28,13 @@ async fn main() {
     // Implement a websocket listener
     // Interface with the controller
 
+    let context = MatterContext::new();
+
     let app = Router::new()
         .merge(Router::new()
         .route("/", get(default_hander))
         .route("/ws", get(ws_handler)))
-        // .layer(Extension(api_context))
+        // .layer(Extension(context))
         ;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 5580));
@@ -39,9 +45,7 @@ async fn main() {
     tokio::join!(server).0.unwrap();
 }
 
-async fn default_hander(
-    
-) -> impl IntoResponse {
+async fn default_hander() -> impl IntoResponse {
     println!("default handler called");
     Json(())
 }
@@ -69,6 +73,19 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
     // unsolicited messages to client based on some sort of server's internal event (i.e .timer).
     let (mut sender, mut receiver) = socket.split();
 
+    // Send the server's details as soon as the client connects
+    let server_details = serde_json::to_string(&common::ServerInfoMessage {
+        fabric_id: 1,
+        compressed_fabric_id: 1,
+        schema_version: SCHEMA_VERSION,
+        min_supported_schema_version: SCHEMA_VERSION,
+        sdk_version: "2023.04.06".to_string(),
+        wifi_credentials_set: false,
+        thread_credentials_set: false,
+    }).unwrap();
+
+    sender.send(Message::Text(server_details)).await.unwrap();
+
     let mut recv_task = tokio::spawn(async move {
         // Keep track of invalid messages and evict socket to prevent DoS
         let mut violations = 0;
@@ -89,7 +106,15 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
                     };
                     // Handle the incoming message
                     match message.command {
-                        common::ApiCommand::StartListening => todo!(),
+                        common::ApiCommand::StartListening => {
+                            // Send a full dump of all nodes once and start receiving events
+                            // TODO: check if listen command already called
+                            let response = common::SuccessResultMessage {
+                                message_id: message.message_id.clone(),
+                                result: json!([]),
+                            };
+                            sender.send(Message::Text(serde_json::to_string(&response).unwrap())).await.unwrap()
+                        },
                         common::ApiCommand::Diagnostics => todo!(),
                         common::ApiCommand::ServerInfo => todo!(),
                         common::ApiCommand::GetNodes => todo!(),
@@ -111,6 +136,7 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
                 }
                 Some(Ok(Message::Ping(_) | Message::Pong(_))) => {
                     // Do nothing (should send a pong though)
+                    println!("Received ping");
                 }
                 Some(Ok(Message::Close(_))) => {
                     println!("Client closed connection, exit");
@@ -127,5 +153,27 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
             }
         }
     });
-    let mut send_task = tokio::spawn(async move {});
+    let mut send_task = tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        }
+    });
+
+    // If any of the tasks exit, abort the other one.
+    tokio::select! {
+        rv_a = (&mut send_task) => {
+            match rv_a {
+                Ok(_) => println!("Sent messages"),
+                Err(a) => println!("Error sending messages {a:?}")
+            }
+            recv_task.abort();
+        },
+        rv_b = (&mut recv_task) => {
+            match rv_b {
+                Ok(_) => println!("Received messages"),
+                Err(b) => println!("Error receiving messages {b:?}")
+            }
+            send_task.abort();
+        }
+    };
 }

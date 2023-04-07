@@ -1142,6 +1142,8 @@ name = "matter-controller"
 version = "0.1.0"
 dependencies = [
  "matter-iot",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1163,6 +1165,7 @@ dependencies = [
  "axum",
  "futures-util",
  "matter-controller-common-ws",
+ "matter-iot",
  "serde",
  "serde_json",
  "tokio",

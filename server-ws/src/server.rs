@@ -10,7 +10,7 @@ use crate::{device_controller::{self, MatterDeviceController}, storage_controlle
 pub struct MatterServer {
     // storage_path: String,
     vendor_id: i32,
-    fabric_id: i32,
+    fabric_id: i64,
     port: i16,
     device_controller: MatterDeviceController,
     storage: StorageController,

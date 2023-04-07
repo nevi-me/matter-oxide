@@ -13,7 +13,7 @@ pub const SCHEMA_VERSION: u8 = 2;
 pub struct WsMessage {
     pub message_id: String,
     pub command: ApiCommand,
-    pub args: HashMap<String, Value>,
+    pub args: Value,
 }
 
 /// Events sent from server to client
@@ -60,7 +60,7 @@ pub enum MessageType {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MatterNodeData {
-    pub node_id: i32,
+    pub node_id: i64,
     /// Unix epoch in milliseconds
     pub date_commissioned: i64,
     pub last_interview: i64,
@@ -79,7 +79,7 @@ pub struct ServerDiagnostics {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerInfoMessage {
-    pub fabric_id: i32,
+    pub fabric_id: i64,
     pub compressed_fabric_id: i32,
     pub schema_version: u8,
     pub min_supported_schema_version: u8,

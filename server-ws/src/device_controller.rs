@@ -32,7 +32,7 @@ impl MatterDeviceController {
         vec![]
     }
 
-    pub async fn get_node(&self, node_id: i32) -> Option<MatterNodeData> {
+    pub async fn get_node(&self, node_id: i64) -> Option<MatterNodeData> {
         None
     }
 
@@ -50,7 +50,7 @@ impl MatterDeviceController {
 
     pub async fn open_commissioning_window(
         &self,
-        node_id: i32,
+        node_id: i64,
         timeout: i32,
         iteration: i32,
         option: i32,
@@ -68,12 +68,12 @@ impl MatterDeviceController {
 
     pub async fn interview_node(
         &self,
-        node_id: i32
+        node_id: i64
     ) {}
 
     pub async fn send_device_command(
         &self,
-        node_id: i32,
+        node_id: i64,
         endpoint_id: i32,
         cluster_id: i32,
         command_name: &str,
@@ -85,9 +85,9 @@ impl MatterDeviceController {
         panic!()
     }
 
-    pub async fn remove_node(&self, node_id: i32) {}
+    pub async fn remove_node(&self, node_id: i64) {}
 
-    pub async fn subscribe_node(&self, node_id: i32) {}
+    pub async fn subscribe_node(&self, node_id: i64) {}
 
 
 
