@@ -1,6 +1,16 @@
+
+
 use matter::{fabric::Fabric, crypto::{KeyPair, CryptoKeyPair}};
 use serde_json::{json, Value};
 
+#[macro_use]
+extern crate num_derive;
+
+pub mod root_cert_manager;
+/// Cluster definitions, servers and clients
+pub mod cluster;
+pub mod data_model;
+pub mod interaction_model;
 
 // TODO: rename to something more appropriate
 pub struct MatterController {
@@ -11,17 +21,40 @@ pub struct MatterController {
 
 impl MatterController {
     pub fn start_controller() -> Self {
-        // TODO: Fabric has persistence logic, reuse that.
-        // Let's get a dummy fabric for now?
         // let keypair = Self::get_or_generate_keypair().unwrap();
         // let fabric = Fabric::new(
         //     keypair, (), None, (), &[], 1
         // ).unwrap();
+
+        // Session Manager
+        // Channel Manager creates channels to nodes and caches them
+        // Exchange Manager mostly receives messages from channels
+        // PaseClient initiates pairing
+        // CaseClient does same
         Self {
             fabric: Fabric::dummy().unwrap(),
             nodes: vec![],
             last_node_id: 0,
         }
+    }
+
+    pub fn commission_with_pin(
+        &self,
+        commissioning_address: &str,
+        commissioning_port: i16,
+        discriminator: u8,
+        pin: i64,
+    ) {
+        // Open PASE channel
+        // PASE pairing to get a secured channel
+        // Start commissioning
+        // Interaction client
+        // Basic cluster client
+        // Perform commissioning with a GeneralCommissioningClusterClient
+        // - arm failsafe
+        // - regulatory info
+        // OperationalCredentialsClusterClient
+
     }
 
     fn get_or_generate_keypair() -> Result<KeyPair, ()> {

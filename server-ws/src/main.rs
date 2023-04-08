@@ -74,7 +74,7 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
     let (mut sender, mut receiver) = socket.split();
 
     // Send the server's details as soon as the client connects
-    let server_details = serde_json::to_string(&common::ServerInfoMessage {
+    let server_info = common::ServerInfoMessage {
         fabric_id: 1,
         compressed_fabric_id: 1,
         schema_version: SCHEMA_VERSION,
@@ -82,7 +82,8 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
         sdk_version: "2023.04.06".to_string(),
         wifi_credentials_set: false,
         thread_credentials_set: false,
-    }).unwrap();
+    };
+    let server_details = serde_json::to_string(&server_info).unwrap();
 
     sender.send(Message::Text(server_details)).await.unwrap();
 
@@ -115,7 +116,19 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
                             };
                             sender.send(Message::Text(serde_json::to_string(&response).unwrap())).await.unwrap()
                         },
-                        common::ApiCommand::Diagnostics => todo!(),
+                        common::ApiCommand::Diagnostics => {
+                            let diagnostics = common::ServerDiagnostics {
+                                info: server_info.clone(),
+                                nodes: vec![],
+                                events: vec![],
+                            };
+                            let response = common::SuccessResultMessage {
+                                message_id: message.message_id.clone(),
+                                result: json!(diagnostics),
+                            };
+                            sender.send(Message::Text(serde_json::to_string(&response).unwrap())).await.unwrap()
+
+                        },
                         common::ApiCommand::ServerInfo => todo!(),
                         common::ApiCommand::GetNodes => todo!(),
                         common::ApiCommand::GetNode => todo!(),

@@ -1142,6 +1142,9 @@ name = "matter-controller"
 version = "0.1.0"
 dependencies = [
  "matter-iot",
+ "num",
+ "num-derive",
+ "num-traits",
  "serde",
  "serde_json",
 ]
