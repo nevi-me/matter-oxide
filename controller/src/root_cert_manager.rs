@@ -1,7 +1,5 @@
 use matter::crypto::KeyPair;
 
-
-
 pub(crate) struct RootCertificateManager {
     root_cert_id: u64,
     root_keypair: KeyPair,
@@ -11,8 +9,6 @@ pub(crate) struct RootCertificateManager {
 }
 
 impl RootCertificateManager {
-
-
     fn generate_root_cert() -> [u8; 64] {
         panic!()
     }

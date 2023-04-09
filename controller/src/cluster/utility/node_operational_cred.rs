@@ -1,8 +1,11 @@
 use num::FromPrimitive;
 
-use crate::{data_model::{Attribute, AttributeValue}, cluster::ClusterClassification};
+use crate::{
+    cluster::ClusterClassification,
+    data_model::{Attribute, AttributeValue},
+};
 
-use crate::cluster::{ClusterBase, Cluster};
+use crate::cluster::{Cluster, ClusterBase};
 
 pub const CLUSTER_ID_NODE_OPERATIONAL_CRED: u16 = 0x003E;
 
@@ -37,7 +40,6 @@ pub enum Commands {
     UpdateFabricLabel = 0x09,
     RemoveFabric = 0x0a,
     AddTrustedRootCertificate = 0x0b,
-
     // ...
 }
 
@@ -71,14 +73,10 @@ impl Default for NodeOperationalCredCluster {
             classification: ClusterClassification::Utility,
             revision: 1,
             features: (), // TODO
-            attributes: vec![
-                Self::attribute_default(Attributes::Nocs),
-            ],
+            attributes: vec![Self::attribute_default(Attributes::Nocs)],
         };
 
-        Self {
-            base,
-        }
+        Self { base }
     }
 }
 
@@ -106,7 +104,7 @@ impl NodeOperationalCredCluster {
                 quality: (),
                 access: (),
             },
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }

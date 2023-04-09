@@ -1,8 +1,11 @@
 use num::FromPrimitive;
 
-use crate::{data_model::{Attribute, AttributeValue}, cluster::ClusterClassification};
+use crate::{
+    cluster::ClusterClassification,
+    data_model::{Attribute, AttributeValue},
+};
 
-use crate::cluster::{ClusterBase, Cluster};
+use crate::cluster::{Cluster, ClusterBase};
 
 pub const CLUSTER_ID_AAAA: u16 = 0x0031;
 
@@ -83,14 +86,10 @@ impl Default for XXXXCluster {
             classification: ClusterClassification::Utility,
             revision: 1,
             features: (), // TODO
-            attributes: vec![
-                Self::attribute_default(Attributes::MaxNetworks),
-            ],
+            attributes: vec![Self::attribute_default(Attributes::MaxNetworks)],
         };
 
-        Self {
-            base,
-        }
+        Self { base }
     }
 }
 
@@ -118,7 +117,7 @@ impl XXXXCluster {
                 quality: (),
                 access: (),
             },
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }

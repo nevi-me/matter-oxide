@@ -3,8 +3,10 @@
 use common::ServerInfoMessage;
 use serde_json::Value;
 
-use crate::{device_controller::{self, MatterDeviceController}, storage_controller::StorageController};
-
+use crate::{
+    device_controller::{self, MatterDeviceController},
+    storage_controller::StorageController,
+};
 
 #[derive(Clone)]
 pub struct MatterServer {
@@ -16,7 +18,7 @@ pub struct MatterServer {
     storage: StorageController,
     /// Command handlers are registered dynamically
     command_handlers: (),
-    subscribers: ()
+    subscribers: (),
 }
 
 impl MatterServer {

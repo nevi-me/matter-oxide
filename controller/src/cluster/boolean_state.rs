@@ -1,8 +1,11 @@
 use num::FromPrimitive;
 
-use crate::{data_model::{Attribute, AttributeValue}, cluster::ClusterClassification};
+use crate::{
+    cluster::ClusterClassification,
+    data_model::{Attribute, AttributeValue},
+};
 
-use super::{ClusterBase, Cluster};
+use super::{Cluster, ClusterBase};
 
 pub const CLUSTER_ID_BOOLEAN_STATE: u16 = 0x0045;
 
@@ -23,7 +26,7 @@ pub enum Commands {
 }
 
 pub enum Event {
-    StateChange(bool)
+    StateChange(bool),
 }
 
 // TODO(spec): make it conformant
@@ -35,14 +38,10 @@ impl Default for BooleanStateCluster {
             classification: ClusterClassification::Application,
             revision: 1,
             features: (), // TODO
-            attributes: vec![
-                Self::attribute_default(Attributes::StateValue),
-            ],
+            attributes: vec![Self::attribute_default(Attributes::StateValue)],
         };
 
-        Self {
-            base,
-        }
+        Self { base }
     }
 }
 

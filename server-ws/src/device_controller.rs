@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use common::MatterNodeData;
 use serde_json::Value;
 
-
-
 #[derive(Clone)]
 pub struct MatterDeviceController {
     controller: (),
@@ -40,7 +38,12 @@ impl MatterDeviceController {
         None
     }
 
-    pub async fn commission_on_network(&self, setup_pin_code: i32, filter_type: i32, filter: Value) -> Option<MatterNodeData> {
+    pub async fn commission_on_network(
+        &self,
+        setup_pin_code: i32,
+        filter_type: i32,
+        filter: Value,
+    ) -> Option<MatterNodeData> {
         None
     }
 
@@ -60,16 +63,11 @@ impl MatterDeviceController {
     }
 
     // Returns a CommisionableNode, which is a type from CHIP
-    pub async fn discover_commisionable_nodes(
-        &self
-    ) -> Vec<()> {
+    pub async fn discover_commisionable_nodes(&self) -> Vec<()> {
         vec![]
     }
 
-    pub async fn interview_node(
-        &self,
-        node_id: i64
-    ) {}
+    pub async fn interview_node(&self, node_id: i64) {}
 
     pub async fn send_device_command(
         &self,
@@ -88,7 +86,4 @@ impl MatterDeviceController {
     pub async fn remove_node(&self, node_id: i64) {}
 
     pub async fn subscribe_node(&self, node_id: i64) {}
-
-
-
 }

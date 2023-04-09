@@ -1,9 +1,5 @@
 //! Defines core types in the data model
 
-
-
-
-
 /// Data Model Specification (7.1)
 pub const DATA_MODEL_REVISION: u8 = 16;
 
@@ -31,7 +27,7 @@ pub struct Attribute {
     pub id: u16,
     pub value: AttributeValue,
     pub quality: (),
-    pub access: ()
+    pub access: (),
 }
 
 pub enum AttributeValue {
@@ -51,7 +47,7 @@ pub enum AttributeValue {
 pub enum EventPriority {
     Debug,
     Info,
-    Critical
+    Critical,
 }
 
 pub enum DeviceTypeClassification {

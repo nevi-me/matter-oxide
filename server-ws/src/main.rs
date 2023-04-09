@@ -8,18 +8,18 @@ use axum::{
     headers,
     response::IntoResponse,
     routing::get,
-    Extension, Router, Json,
+    Extension, Json, Router,
 };
 use common::{WsMessage, SCHEMA_VERSION};
-use futures_util::{StreamExt, SinkExt};
+use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 
 use crate::context::MatterContext;
 
+mod context;
 mod device_controller;
 mod server;
 mod storage_controller;
-mod context;
 
 #[tokio::main]
 async fn main() {
@@ -114,8 +114,11 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
                                 message_id: message.message_id.clone(),
                                 result: json!([]),
                             };
-                            sender.send(Message::Text(serde_json::to_string(&response).unwrap())).await.unwrap()
-                        },
+                            sender
+                                .send(Message::Text(serde_json::to_string(&response).unwrap()))
+                                .await
+                                .unwrap()
+                        }
                         common::ApiCommand::Diagnostics => {
                             let diagnostics = common::ServerDiagnostics {
                                 info: server_info.clone(),
@@ -126,9 +129,11 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
                                 message_id: message.message_id.clone(),
                                 result: json!(diagnostics),
                             };
-                            sender.send(Message::Text(serde_json::to_string(&response).unwrap())).await.unwrap()
-
-                        },
+                            sender
+                                .send(Message::Text(serde_json::to_string(&response).unwrap()))
+                                .await
+                                .unwrap()
+                        }
                         common::ApiCommand::ServerInfo => todo!(),
                         common::ApiCommand::GetNodes => todo!(),
                         common::ApiCommand::GetNode => todo!(),

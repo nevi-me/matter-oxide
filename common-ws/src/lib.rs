@@ -7,7 +7,6 @@ use serde_json::Value;
 
 pub const SCHEMA_VERSION: u8 = 2;
 
-
 /// A WebSocket message's expected text payload
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct WsMessage {

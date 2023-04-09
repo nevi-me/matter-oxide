@@ -1,10 +1,8 @@
 use crate::{data_model::Attribute, interaction_model::CommandRequest};
 
-
-
+pub mod boolean_state;
 pub mod level;
 pub mod on_off;
-pub mod boolean_state;
 pub mod utility;
 
 /// Revision History

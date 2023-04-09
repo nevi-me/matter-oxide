@@ -1,7 +1,10 @@
 use num::FromPrimitive;
 
-use crate::{data_model::{Attribute, AttributeValue}, cluster::ClusterClassification};
-use crate::cluster::{ClusterBase, Cluster};
+use crate::cluster::{Cluster, ClusterBase};
+use crate::{
+    cluster::ClusterClassification,
+    data_model::{Attribute, AttributeValue},
+};
 
 pub const CLUSTER_ID_GENERAL_COMMISSIONING: u16 = 0x0030;
 
@@ -16,8 +19,7 @@ pub enum Attributes {
     BasicCommissioningInfo,
     RegulatoryConfig,
     LocationCapability,
-    SupportsConcurrentConnection
-    // ...
+    SupportsConcurrentConnection, // ...
 }
 
 #[repr(u8)]
@@ -60,14 +62,10 @@ impl Default for GeneralCommissioningCluster {
             classification: ClusterClassification::Utility,
             revision: 1,
             features: (), // TODO
-            attributes: vec![
-                Self::attribute_default(Attributes::Breadcrumb),
-            ],
+            attributes: vec![Self::attribute_default(Attributes::Breadcrumb)],
         };
 
-        Self {
-            base,
-        }
+        Self { base }
     }
 }
 
@@ -95,7 +93,7 @@ impl GeneralCommissioningCluster {
                 quality: (),
                 access: (),
             },
-            _ => panic!()
+            _ => panic!(),
         }
     }
 }

@@ -1,8 +1,11 @@
 use num::FromPrimitive;
 
-use crate::{data_model::{Attribute, AttributeValue}, cluster::ClusterClassification};
+use crate::{
+    cluster::ClusterClassification,
+    data_model::{Attribute, AttributeValue},
+};
 
-use super::{ClusterBase, Cluster};
+use super::{Cluster, ClusterBase};
 
 pub const CLUSTER_ID_LEVEL: u16 = 0x0008;
 pub const CLUSTER_ID_LEVEL_LIGHT: u16 = CLUSTER_ID_LEVEL;
@@ -54,9 +57,7 @@ impl Default for LevelCluster {
             ],
         };
 
-        Self {
-            base,
-        }
+        Self { base }
     }
 }
 

@@ -1,8 +1,11 @@
 use num::FromPrimitive;
 
-use crate::{data_model::{Attribute, AttributeValue}, cluster::ClusterClassification};
+use crate::{
+    cluster::ClusterClassification,
+    data_model::{Attribute, AttributeValue},
+};
 
-use super::{ClusterBase, Cluster, ClusterServer};
+use super::{Cluster, ClusterBase, ClusterServer};
 
 pub const CLUSTER_ID_ON_OFF: u16 = 0x0006;
 
@@ -52,9 +55,7 @@ impl Default for OnOffCluster {
             ],
         };
 
-        Self {
-            base,
-        }
+        Self { base }
     }
 }
 

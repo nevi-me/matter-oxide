@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-
-
 #[derive(Clone)]
 pub struct StorageController {
     storage_path: String,
@@ -11,9 +9,7 @@ pub struct StorageController {
 }
 
 impl StorageController {
-    pub async fn new(
-        storage_path: &str,
-    ) -> Self {
+    pub async fn new(storage_path: &str) -> Self {
         panic!()
     }
 
@@ -25,19 +21,9 @@ impl StorageController {
         None
     }
 
-    pub fn set(
-        &mut self,
-        key: &str,
-        value: Value,
-        subkey: Option<&str>,
-        force: bool,
-    ) {}
+    pub fn set(&mut self, key: &str, value: Value, subkey: Option<&str>, force: bool) {}
 
-    pub fn remove(
-        &mut self,
-        key: &str,
-        subkey: Option<&str>,
-    ) {}
+    pub fn remove(&mut self, key: &str, subkey: Option<&str>) {}
 
     // Does it make sense to store data in-mem and periodically save,
     // or should we just direclty persist to disk? I like the latter.
