@@ -1,16 +1,23 @@
-
-
-use matter::{fabric::Fabric, crypto::{KeyPair, CryptoKeyPair}};
+use matter::{
+    crypto::{CryptoKeyPair, KeyPair},
+    fabric::Fabric,
+};
 use serde_json::{json, Value};
 
 #[macro_use]
 extern crate num_derive;
+extern crate alloc;
 
-pub mod root_cert_manager;
 /// Cluster definitions, servers and clients
 pub mod cluster;
 pub mod data_model;
 pub mod interaction_model;
+pub mod message;
+pub mod root_cert_manager;
+pub mod secure_channel;
+pub mod transport;
+
+pub type TlvAnyData = heapless::Vec<u8, 1024>;
 
 // TODO: rename to something more appropriate
 pub struct MatterController {
@@ -54,7 +61,6 @@ impl MatterController {
         // - arm failsafe
         // - regulatory info
         // OperationalCredentialsClusterClient
-
     }
 
     fn get_or_generate_keypair() -> Result<KeyPair, ()> {
@@ -77,10 +83,14 @@ impl MatterController {
             assert_eq!(len, private_key.len());
             let len = keypair.get_public_key(&mut public_key).unwrap();
             assert_eq!(len, public_key.len());
-            serde_json::to_writer(keypair_file, &KeyPairStorage {
-                private: private_key.to_vec(),
-                public: public_key.to_vec()
-            }).unwrap();
+            serde_json::to_writer(
+                keypair_file,
+                &KeyPairStorage {
+                    private: private_key.to_vec(),
+                    public: public_key.to_vec(),
+                },
+            )
+            .unwrap();
             Ok(keypair)
         }
     }
@@ -89,5 +99,5 @@ impl MatterController {
 #[derive(serde::Serialize, serde::Deserialize)]
 struct KeyPairStorage {
     private: Vec<u8>,
-    public: Vec<u8>
+    public: Vec<u8>,
 }
