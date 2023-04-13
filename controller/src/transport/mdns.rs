@@ -1,15 +1,13 @@
 use std::{
-    cell::RefCell,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::Mutex,
 };
 
 use libmdns::{Responder, Service};
 use once_cell::sync::Lazy;
-use trust_dns_client::rr::Name;
 
 pub const MDNS_BROADCAST_IPV4: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251); // "224.0.0.251"
-pub const MDNS_BROADCAST_IPV6: Ipv6Addr = Ipv6Addr::new(0xff, 0x02, 0, 0, 0, 0, 0, 0xfb); // "ff02::fb"
+pub const MDNS_BROADCAST_IPV6: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0x00FA); // "ff02::fb"
 pub const MDNS_BROADCAST_PORT: u16 = 5353;
 pub const DNS_MATTER_PORT: u16 = 5540;
 
@@ -51,21 +49,6 @@ impl MdnsHandler {
     }
 }
 
-pub fn query_service() {
-    use trust_dns_client::client::{Client, SyncClient};
-    let conn = trust_dns_client::multicast::MdnsClientConnection::new_ipv6(None, Some(0xffff));
-    let sync_client = SyncClient::new(conn);
-    let name: Name = Name::from_utf8("_matterc._udp").unwrap();
-    let result = sync_client
-        .query(
-            &name,
-            trust_dns_client::rr::DNSClass::ANY,
-            trust_dns_client::rr::RecordType::AAAA,
-        )
-        .unwrap();
-    dbg!(result);
-}
-
 pub struct MdnsNodeInfo {
     pub vendor_id: u16,
     pub product_id: u16,
@@ -104,7 +87,43 @@ pub enum DnsServiceMode {
     Commisioner(u16),
 }
 
-#[test]
-fn test() {
-    query_service()
+pub async fn query_service() {
+    use futures_util::{pin_mut, stream::StreamExt};
+    use mdns::{Error, Record, RecordKind};
+    use std::{net::IpAddr, time::Duration};
+
+    // Iterate through responses from each Cast device, asking for new devices every 15s
+    let stream = mdns::discover::all("_matterc._udp.local", Duration::from_secs(15))
+        .unwrap()
+        .listen();
+    pin_mut!(stream);
+
+    while let Some(Ok(response)) = stream.next().await {
+        let addr = response.records().collect::<Vec<_>>();
+        let txt = response.txt_records().collect::<Vec<_>>();
+        dbg!(&response);
+        // let x = response.hostname();
+        // dbg!(x);
+        // dbg!(txt);
+
+        // dbg!(addr);
+    }
+}
+
+fn to_ip_addr(record: &mdns::Record) -> Option<IpAddr> {
+    match record.kind {
+        mdns::RecordKind::A(addr) => Some(addr.into()),
+        mdns::RecordKind::AAAA(addr) => Some(addr.into()),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test() {
+        query_service().await
+    }
 }

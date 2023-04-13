@@ -1,9 +1,12 @@
-use crate::message::Message;
+use crate::{
+    message::{Message, MessageHeader, ProtocolHeader},
+    session_context::SecureSessionContext,
+};
 
-use super::{pake::SedParameters, SessionContext};
+use super::pake::SedParameters;
 
 pub struct CaseInteraction {
-    session_context: SessionContext,
+    session_context: SecureSessionContext,
 }
 
 impl CaseInteraction {
@@ -14,9 +17,10 @@ impl CaseInteraction {
         // Generate ephemeral keypair
         // May encode MRP params
         Message {
-            session_type: todo!(),
-            header: todo!(),
-            integrity_check: todo!(),
+            message_header: MessageHeader::default(),
+            payload_header: None,
+            payload: vec![],
+            integrity_check: None,
         }
     }
     pub fn sigma1_with_resumption(&mut self) -> Message {
@@ -24,9 +28,10 @@ impl CaseInteraction {
         // Generate s1rk
         // Generate initiator reume NIC using shared secret
         Message {
-            session_type: todo!(),
-            header: todo!(),
-            integrity_check: todo!(),
+            message_header: MessageHeader::default(),
+            payload_header: None,
+            payload: vec![],
+            integrity_check: None,
         }
     }
     pub fn sigma2(&mut self, request: &Sigma1) -> Message {
@@ -36,30 +41,34 @@ impl CaseInteraction {
         // Validate sigma1 destination ID
 
         Message {
-            session_type: todo!(),
-            header: todo!(),
-            integrity_check: todo!(),
+            message_header: MessageHeader::default(),
+            payload_header: None,
+            payload: vec![],
+            integrity_check: None,
         }
     }
     pub fn sigma2_resume(&mut self) -> Message {
         Message {
-            session_type: todo!(),
-            header: todo!(),
-            integrity_check: todo!(),
+            message_header: MessageHeader::default(),
+            payload_header: None,
+            payload: vec![],
+            integrity_check: None,
         }
     }
     pub fn sigma3(&mut self) -> Message {
         Message {
-            session_type: todo!(),
-            header: todo!(),
-            integrity_check: todo!(),
+            message_header: MessageHeader::default(),
+            payload_header: None,
+            payload: vec![],
+            integrity_check: None,
         }
     }
     pub fn sigma_finished(&mut self) -> Message {
         Message {
-            session_type: todo!(),
-            header: todo!(),
-            integrity_check: todo!(),
+            message_header: MessageHeader::default(),
+            payload_header: None,
+            payload: vec![],
+            integrity_check: None,
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Common data types used by the WebSockets client and server
 
-use std::collections::HashMap;
+use std::{collections::HashMap, net::IpAddr};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -111,4 +111,24 @@ pub struct ErrorResultMessage {
 pub struct EventMessage {
     pub event: EventType,
     pub data: Value,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CommissionableNode {
+    pub instance_name: String,
+    pub host_name: String,
+    pub port: u16,
+    pub long_discriminator: u16,
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub commissioning_mode: u8, // TODO make an enum
+    pub device_type: u16,
+    pub device_name: Option<String>,
+    pub pairing_instruction: Option<String>,
+    pub pairing_hint: u8,
+    pub mrp_retry_interval_idle: Option<u16>,
+    pub mrp_retry_interval_active: Option<u16>,
+    pub supports_tcp: bool,
+    pub addresses: Vec<IpAddr>,
+    pub rotating_id: Option<i64>,
 }
