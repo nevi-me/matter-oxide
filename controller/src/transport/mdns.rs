@@ -123,6 +123,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "long running test, doesn't assert anything, needs more work"]
     async fn test() {
         query_service().await
     }

@@ -23,8 +23,8 @@ in the session context? What else gets stored in the unsecured session context?
 */
 pub struct PAKEInteraction {
     spake2p: Spake2P,
-    pbkdf_param_request: Option<PBKDFParamRequest>,
-    pbkdf_param_response: Option<PBKDFParamResponse>,
+    pbkdf_param_request: Vec<u8>,
+    pbkdf_param_response: Vec<u8>,
     /// Respondent can set these at the beginning if known or when generated.
     pbkdf_params: Option<PBKDFParams>,
     // This is also stored in the unsecured session context
@@ -32,31 +32,41 @@ pub struct PAKEInteraction {
     // session_role there.
     initiator_session_id: u16,
     responder_session_id: u16,
+    exchange_id: u16,
+    message_counter: u32,
     // Some internal storage
     c_a: [u8; CRYPTO_HASH_LEN_BYTES],
 }
 
 impl PAKEInteraction {
-    // The session ID should be generated externally as we need to check for conflicts
-    pub fn initiator(session_id: u16) -> Self {
+    pub fn initiator(session_id: u16, exchange_id: u16, message_counter: u32) -> Self {
         Self {
             spake2p: Spake2P::new(),
             initiator_session_id: session_id,
             responder_session_id: 0,
-            pbkdf_param_request: None,
-            pbkdf_param_response: None,
+            exchange_id,
+            message_counter,
+            pbkdf_param_request: vec![],
+            pbkdf_param_response: vec![],
             pbkdf_params: None,
             c_a: Default::default(),
         }
     }
 
-    pub fn responder(session_id: u16, pbkdf_params: Option<PBKDFParams>) -> Self {
+    pub fn responder(
+        session_id: u16,
+        exchange_id: u16,
+        message_counter: u32,
+        pbkdf_params: Option<PBKDFParams>,
+    ) -> Self {
         Self {
             spake2p: Spake2P::new(),
             initiator_session_id: 0,
+            exchange_id,
+            message_counter,
             responder_session_id: session_id,
-            pbkdf_param_request: None,
-            pbkdf_param_response: None,
+            pbkdf_param_request: vec![],
+            pbkdf_param_response: vec![],
             pbkdf_params,
             c_a: Default::default(),
         }
@@ -74,18 +84,10 @@ impl PAKEInteraction {
         }
         let passcode_id = 0;
 
-        // let mut message_header = MessageHeader::new(0);
-        // message_header
-        //     .message_flags
-        //     .set(MessageFlags::SOURCE_NODE_ID_PRESENT, true);
-        // message_header.source_node_id = Some(1000);
-        // // TODO: use a builder that validates the rules
-        // message_header
-        //     .security_flags
-        //     .set(SecurityFlags::SESSION_UNICAST, true);
-        // // Message flags are set to 0, no need to do that
-
-        let mut payload_header = ProtocolHeader::default();
+        let mut payload_header = ProtocolHeader {
+            exchange_id: self.exchange_id,
+            ..Default::default()
+        };
         // Secure channel by default
         payload_header
             .exchange_flags
@@ -104,7 +106,7 @@ impl PAKEInteraction {
         };
         // Encode the request struct
         let encoded = pbkdf_param_request.to_tlv();
-        self.pbkdf_param_request = Some(pbkdf_param_request);
+        self.pbkdf_param_request = encoded.to_slice().to_vec();
         Message {
             message_header: self.message_header(),
             payload_header: Some(payload_header),
@@ -143,20 +145,30 @@ impl PAKEInteraction {
             pbkdf_params_response.pbkdf_params = self.pbkdf_params.clone();
         }
         let encoded = pbkdf_params_response.to_tlv();
-        self.pbkdf_param_response = Some(pbkdf_params_response);
+        self.pbkdf_param_response = encoded.to_slice().to_vec();
+
+        // DRY: Payload header
+        let mut payload_header = ProtocolHeader::default();
+        payload_header.exchange_id = self.exchange_id;
+        // Secure channel by default
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::INITIATOR, true);
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::RELIABILITY, true);
+        payload_header.protocol_opcode = SecureChannelProtocolID::PBKDFParamResponse as _;
 
         Message {
             message_header: self.message_header(),
-            payload_header: None,
+            payload_header: Some(payload_header),
             payload: encoded.to_slice().to_vec(),
             integrity_check: None,
         }
     }
-    pub fn pake1(
-        &mut self,
-        session_context: &mut UnsecuredSessionContext,
-        request: &PBKDFParamResponse,
-    ) -> Message {
+
+    pub fn pake1(&mut self, session_context: &mut UnsecuredSessionContext) -> Message {
+        let request = PBKDFParamResponse::from_tlv(&self.pbkdf_param_response);
         session_context.peer_session_id = request.responder_session_id;
         // Generate Crypto_PAKEValues_Initiator
         let mut w0w1 = [0; 2 * CRYPTO_W_SIZE_BYTES];
@@ -179,9 +191,21 @@ impl PAKEInteraction {
         let pake1 = Pake1 { p_a };
         let encoded = pake1.to_tlv();
 
+        // DRY: Payload header
+        let mut payload_header = ProtocolHeader::default();
+        payload_header.exchange_id = self.exchange_id;
+        // Secure channel by default
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::INITIATOR, true);
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::RELIABILITY, true);
+        payload_header.protocol_opcode = SecureChannelProtocolID::PASEPake1 as _;
+
         Message {
             message_header: self.message_header(),
-            payload_header: None,
+            payload_header: Some(payload_header),
             payload: encoded.to_slice().to_vec(),
             integrity_check: None,
         }
@@ -189,9 +213,8 @@ impl PAKEInteraction {
     pub fn pake2(&mut self, request: &Pake1) -> Message {
         // Generate Crypto_PAKEValues_Initiator
         let mut w0w1 = [0; 2 * CRYPTO_W_SIZE_BYTES];
-        // TODO: salt would have been stored in the context
-        let salt = [0; 32];
-        pbkdf2_hmac(&123456u32.to_le_bytes(), PBKDF_ITERATIONS, &salt, &mut w0w1);
+        let PBKDFParams {iterations, salt} = &self.pbkdf_params.as_ref().unwrap();
+        pbkdf2_hmac(&123456u32.to_le_bytes(), *iterations as usize, salt, &mut w0w1);
         let (w0s, w1s) = w0w1.split_at(CRYPTO_W_SIZE_BYTES);
         self.spake2p.set_w0_from_w0s(w0s);
         self.spake2p.set_w1_from_w1s(w1s);
@@ -204,27 +227,19 @@ impl PAKEInteraction {
         let mut context = crypto_sha256::Sha256::new();
         context.update(&SPAKE2P_CONTEXT_PREFIX);
         // TODO: maybe store bytes so we don't do this twice
-        context.update(
-            self.pbkdf_param_request
-                .as_ref()
-                .unwrap()
-                .to_tlv()
-                .to_slice(),
-        );
-        context.update(
-            self.pbkdf_param_response
-                .as_ref()
-                .unwrap()
-                .to_tlv()
-                .to_slice(),
-        );
+        context.update(&self.pbkdf_param_request);
+        context.update(&self.pbkdf_param_response);
         context.finish(&mut hash);
         // Compute (cA, cB, Ke)
         let mut k_e = [0; 16];
         let mut c_b = [0; CRYPTO_HASH_LEN_BYTES];
         self.spake2p
-            .compute_p2(&hash, &request.p_a, &p_b, &mut k_e, &mut self.c_a, &mut c_b);
-
+            .get_ke_and_ca_cb(&hash, &request.p_a, &p_b, &mut k_e, &mut self.c_a, &mut c_b);
+        println!("p_a {}", hex::encode(request.p_a));
+        println!("p_b {}", hex::encode(p_b));
+        println!("k_e {}", hex::encode(k_e));
+        println!("c_a {}", hex::encode(self.c_a));
+        println!("c_b {}", hex::encode(c_b));
         let pake2 = Pake2 { p_b, c_b };
         let encoded = pake2.to_tlv();
 
@@ -240,34 +255,30 @@ impl PAKEInteraction {
         let mut hash = [0; SHA256_HASH_LEN_BYTES];
         let mut context = crypto_sha256::Sha256::new();
         context.update(&SPAKE2P_CONTEXT_PREFIX);
-        // TODO: maybe store bytes so we don't do this twice
-        context.update(
-            self.pbkdf_param_request
-                .as_ref()
-                .unwrap()
-                .to_tlv()
-                .to_slice(),
-        );
-        context.update(
-            self.pbkdf_param_response
-                .as_ref()
-                .unwrap()
-                .to_tlv()
-                .to_slice(),
-        );
+        context.update(&self.pbkdf_param_request);
+        context.update(&self.pbkdf_param_response);
         context.finish(&mut hash);
+        // Compute transcript
+        let mut transcript = [0; SHA256_HASH_LEN_BYTES];
+        self.spake2p
+            .prover_transcript(&hash, self.spake2p.get_x(), &request.p_b, &mut transcript);
         // Compute (cA, cB, Ke)
         let mut k_e = [0; 16];
-        let mut c_a = [0; CRYPTO_HASH_LEN_BYTES];
         let mut c_b = [0; CRYPTO_HASH_LEN_BYTES];
-        self.spake2p.compute_p2(
+        self.spake2p.get_ke_and_ca_cb(
             &hash,
-            &self.spake2p.get_x(),
+            self.spake2p.get_x(),
             &request.p_b,
             &mut k_e,
-            &mut c_a,
+            &mut self.c_a,
             &mut c_b,
         );
+        println!("p_a {}", hex::encode(self.spake2p.get_x()));
+        println!("p_b {}", hex::encode(request.p_b));
+        println!("k_e {}", hex::encode(k_e));
+        println!("c_a {}", hex::encode(self.c_a));
+        println!("c_b {}", hex::encode(c_b));
+        println!("r.c_b {}", hex::encode(request.c_b));
         // Verify Pake2.cB against cB
         assert_eq!(c_b, request.c_b);
 
@@ -293,8 +304,14 @@ impl PAKEInteraction {
             integrity_check: None,
         }
     }
-    fn message_header(&self) -> MessageHeader {
+
+    pub fn set_pbkdf_param_response(&mut self, value: Vec<u8>) {
+        self.pbkdf_param_response = value;
+    }
+    fn message_header(&mut self) -> MessageHeader {
         let mut message_header = MessageHeader::new(0);
+        message_header.message_counter = self.message_counter;
+        self.message_counter += 1;
         message_header
             .message_flags
             .set(MessageFlags::SOURCE_NODE_ID_PRESENT, true);
@@ -319,7 +336,7 @@ In each of the above interactions, I'll mutate state, then return a response.
 So let's start by returning a message or an error.
  */
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PBKDFParams {
     pub iterations: u32,
     pub salt: Vec<u8>, // 16..32 length
@@ -462,6 +479,7 @@ impl PBKDFParamRequest {
     }
 }
 
+#[derive(Debug)]
 pub struct PBKDFParamResponse {
     pub initiator_random: [u8; 32],
     pub responder_random: [u8; 32],
@@ -539,18 +557,23 @@ impl PBKDFParamResponse {
             match element.get_control() {
                 TagControl::Anonymous => {}
                 TagControl::ContextSpecific(1) if in_pbkdf_params => {
-                    if let TagLengthValue::Unsigned32(value) = element.get_value() {
-                        match pbkdf_params.as_mut() {
-                            Some(params) => {
-                                params.iterations = value;
-                            }
-                            None => {
-                                pbkdf_params = Some(PBKDFParams {
-                                    iterations: value,
-                                    // TODO: avoid this alloc
-                                    salt: vec![],
-                                })
-                            }
+                    let value = if let TagLengthValue::Unsigned32(value) = element.get_value() {
+                        value
+                    } else if let TagLengthValue::Unsigned16(value) = element.get_value() {
+                        value as u32
+                    } else {
+                        panic!();
+                    };
+                    match pbkdf_params.as_mut() {
+                        Some(params) => {
+                            params.iterations = value;
+                        }
+                        None => {
+                            pbkdf_params = Some(PBKDFParams {
+                                iterations: value,
+                                // TODO: avoid this alloc
+                                salt: vec![],
+                            })
                         }
                     }
                 }
@@ -637,13 +660,14 @@ impl PBKDFParamResponse {
         Self {
             initiator_random: initiator_random.unwrap(),
             responder_random: responder_random.unwrap(),
-            responder_session_id: responder_session_id.unwrap(),
+            responder_session_id: responder_session_id.unwrap_or_default(),
             pbkdf_params,
             responder_sed_params,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct SedParameters {
     pub sleepy_idle_interval: Option<u32>,
     pub sleepy_active_interval: Option<u32>,
@@ -829,5 +853,21 @@ impl Pake3 {
         }
 
         Self { c_a: c_a.unwrap() }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "fails, using it to investigate TLV differences in implementation"]
+    fn decode_tlv_pbkdf_param_response() {
+        let data = hex_literal::hex!("15300120c3bf6a81dda5b85c626a582fdaf855cb7085ee308c8976954544afe814cca1a3300220cbcf9f1deebd2e12bac9ae12ef8573f6dfa8a80ef27a0de5529661652ddf315b24030135042501d00730022054dbdb1db37e40d5d57c9e1a84ffde9311a98a843cec2e75b526fa4f424def761818");
+        let response = PBKDFParamResponse::from_tlv(&data);
+        assert_eq!(response.pbkdf_params.as_ref().unwrap().iterations, 2000);
+        let out = response.to_tlv();
+        let out = out.to_slice();
+        assert_eq!(hex::encode(data), hex::encode(out));
     }
 }

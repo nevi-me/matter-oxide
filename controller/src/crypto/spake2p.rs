@@ -45,8 +45,10 @@ impl Spake2P {
         let p_a = p256::EncodedPoint::default();
         let p_b = p256::EncodedPoint::default();
 
+        let mut rng = rand::thread_rng();
+
         Spake2P {
-            xy: p256::Scalar::ZERO,
+            xy: p256::Scalar::random(&mut rng),
             w0: p256::Scalar::ZERO,
             w1: p256::Scalar::ZERO,
             m,
@@ -124,7 +126,6 @@ impl Spake2P {
                 .unwrap();
     }
 
-    #[allow(dead_code)]
     pub fn set_l(&mut self, l: &[u8]) {
         self.l = p256::EncodedPoint::from_bytes(l).unwrap();
     }
@@ -137,38 +138,53 @@ impl Spake2P {
         self.l = (p256::AffinePoint::GENERATOR * self.w1).to_encoded_point(false);
     }
 
+    /// 3.3
     pub fn compute_x(&mut self, x: &mut [u8]) {
-        let mut rng = rand::thread_rng();
-        self.xy = p256::Scalar::random(&mut rng);
-
-        let p = p256::AffinePoint::GENERATOR;
         let m = p256::AffinePoint::from_encoded_point(&self.m).unwrap();
-        self.p_a = Self::do_add_mul(p, self.xy, m, self.w0);
-        let x_internal = self.p_a.as_bytes();
-        x.copy_from_slice(x_internal);
+        self.p_a = Self::do_add_mul(p256::AffinePoint::GENERATOR, self.xy, m, self.w0);
+        x.copy_from_slice(self.p_a.as_bytes());
     }
 
     pub fn compute_y(&mut self, y: &mut [u8]) {
-        let mut rng = rand::thread_rng();
-        self.xy = p256::Scalar::random(&mut rng);
-
-        let p = p256::AffinePoint::GENERATOR;
         let n = p256::AffinePoint::from_encoded_point(&self.n).unwrap();
-        self.p_b = Self::do_add_mul(p, self.xy, n, self.w0);
-        let y_internal = self.p_b.as_bytes();
-        y.copy_from_slice(y_internal);
+        self.p_b = Self::do_add_mul(p256::AffinePoint::GENERATOR, self.xy, n, self.w0);
+        y.copy_from_slice(self.p_b.as_bytes());
     }
 
     pub fn get_x(&self) -> &[u8] {
         self.p_a.as_bytes()
     }
 
-    fn get_tt(&self, context: &[u8], p_a: &[u8], p_b: &[u8], out: &mut [u8]) {
+    pub fn prover_transcript(&self, context: &[u8], p_a: &[u8], p_b: &[u8], out: &mut [u8]) {
+        let y = p256::EncodedPoint::from_bytes(p_b).unwrap();
+        let y = p256::AffinePoint::from_encoded_point(&y).unwrap();
+        let n = p256::AffinePoint::from_encoded_point(&self.n).unwrap();
+        let (z, v) = Self::get_ZV_as_prover(self.w0, self.w1, n, y, self.xy);
+        self.get_transcript(context, p_a, p_b, z.as_bytes(), v.as_bytes(), out);
+    }
+
+    pub fn verifier_transcript(&self, context: &[u8], p_a: &[u8], p_b: &[u8], out: &mut [u8]) {
+        let x = p256::EncodedPoint::from_bytes(p_a).unwrap();
+        let x = p256::AffinePoint::from_encoded_point(&x).unwrap();
+        let l = p256::AffinePoint::from_encoded_point(&self.l).unwrap();
+        let m = p256::AffinePoint::from_encoded_point(&self.m).unwrap();
+        let (z, v) = Self::get_ZV_as_verifier(self.w0, l, m, x, self.xy);
+        self.get_transcript(context, p_a, p_b, z.as_bytes(), v.as_bytes(), out);
+    }
+
+    fn get_transcript(
+        &self,
+        context: &[u8],
+        x: &[u8],
+        y: &[u8],
+        z: &[u8],
+        v: &[u8],
+        out: &mut [u8],
+    ) {
         let mut tt = sha2::Sha256::new();
         // Context
         Self::add_to_tt(&mut tt, context);
         // 2 empty identifiers
-        // TODO: should these be 64-bit values?
         Self::add_to_tt(&mut tt, &[]);
         Self::add_to_tt(&mut tt, &[]);
         // M
@@ -176,41 +192,31 @@ impl Spake2P {
         // N
         Self::add_to_tt(&mut tt, &MATTER_N_BIN);
         // X = pA
-        Self::add_to_tt(&mut tt, p_a);
+        Self::add_to_tt(&mut tt, x);
         // Y = pB
-        Self::add_to_tt(&mut tt, p_b);
-
-        let X = p256::EncodedPoint::from_bytes(p_a).unwrap();
-        let X = p256::AffinePoint::from_encoded_point(&X).unwrap();
-        let L = p256::AffinePoint::from_encoded_point(&self.l).unwrap();
-        let M = p256::AffinePoint::from_encoded_point(&self.m).unwrap();
-        let (Z, V) = Self::get_ZV_as_verifier(self.w0, L, M, X, self.xy);
-
+        Self::add_to_tt(&mut tt, y);
         // Z
-        Self::add_to_tt(&mut tt, Z.as_bytes());
+        Self::add_to_tt(&mut tt, z);
         // V
-        Self::add_to_tt(&mut tt, V.as_bytes());
+        Self::add_to_tt(&mut tt, v);
         // w0
-        Self::add_to_tt(&mut tt, self.w0.to_bytes().to_vec().as_ref());
+        Self::add_to_tt(&mut tt, self.w0.to_bytes().as_slice());
 
         let h = tt.finalize();
         out.copy_from_slice(h.as_slice());
     }
 
-    pub fn compute_p2(
+    pub fn get_ke_and_ca_cb(
         &self,
-        context: &[u8],
+        transcript: &[u8],
         p_a: &[u8],
         p_b: &[u8],
         k_e: &mut [u8],
         c_a: &mut [u8],
         c_b: &mut [u8],
     ) {
-        let mut tt = [0; SHA256_HASH_LEN_BYTES];
-        self.get_tt(context, p_a, p_b, &mut tt);
         // Step 1: Ka || Ke = Hash(TT)
-        let tt_len = tt.len();
-        let (ka, ke_int) = tt.split_at(tt_len / 2);
+        let (ka, ke_int) = transcript.split_at(transcript.len() / 2);
         if ke_int.len() == k_e.len() {
             k_e.copy_from_slice(ke_int);
         } else {
@@ -220,7 +226,6 @@ impl Spake2P {
         // Step 2: KcA || KcB = KDF(nil, Ka, "ConfirmationKeys")
         let mut kca_kcb: [u8; 32] = [0; 32];
         crate::crypto::hkdf_sha256(&[], ka, &SPAKE2P_KEY_CONFIRM_INFO, &mut kca_kcb);
-
         let (k_ca, k_cb) = kca_kcb.split_at(kca_kcb.len() / 2);
 
         // Step 3: cA = HMAC(KcA, pB), cB = HMAC(KcB, pA)
@@ -254,7 +259,7 @@ impl Spake2P {
 
     #[inline(always)]
     #[allow(dead_code)]
-    fn get_ZV_as_prover(
+    pub fn get_ZV_as_prover(
         w0: p256::Scalar,
         w1: p256::Scalar,
         N: p256::AffinePoint,
@@ -285,7 +290,7 @@ impl Spake2P {
     #[inline(always)]
     #[allow(non_snake_case)]
     #[allow(dead_code)]
-    fn get_ZV_as_verifier(
+    pub fn get_ZV_as_verifier(
         w0: p256::Scalar,
         L: p256::AffinePoint,
         M: p256::AffinePoint,
@@ -309,5 +314,133 @@ impl Spake2P {
         // Cofactor for P256 is 1, so that is a No-Op
         let V = (L * y).to_encoded_point(false);
         (Z, V)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use elliptic_curve::sec1::FromEncodedPoint;
+
+    use crate::util::test_vectors::*;
+
+    // Setters and clearers for testing purposes
+    impl Spake2P {
+        fn set_random(&mut self, value: &[u8]) {
+            self.xy = p256::Scalar::from_repr(
+                *elliptic_curve::generic_array::GenericArray::from_slice(value),
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_get_x() {
+        for t in RFC_T {
+            let mut c = Spake2P::new();
+            let x = p256::Scalar::from_repr(
+                *elliptic_curve::generic_array::GenericArray::from_slice(&t.x),
+            )
+            .unwrap();
+            c.set_w0(&t.w0);
+            let P = p256::AffinePoint::GENERATOR;
+            let M = p256::AffinePoint::from_encoded_point(&c.m).unwrap();
+            let r: p256::EncodedPoint = Spake2P::do_add_mul(P, x, M, c.w0);
+            assert_eq!(&t.X, r.as_bytes());
+
+            c.set_random(&t.x);
+            let mut x = [0u8; 65];
+            c.compute_x(&mut x);
+            assert_eq!(&t.X, &x);
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_get_Y() {
+        for t in RFC_T {
+            let mut c = Spake2P::new();
+            let y = p256::Scalar::from_repr(
+                *elliptic_curve::generic_array::GenericArray::from_slice(&t.y),
+            )
+            .unwrap();
+            c.set_w0(&t.w0);
+            let P = p256::AffinePoint::GENERATOR;
+            let N = p256::AffinePoint::from_encoded_point(&c.n).unwrap();
+            let r = Spake2P::do_add_mul(P, y, N, c.w0);
+            assert_eq!(&t.Y, r.as_bytes());
+
+            c.set_random(&t.y);
+            let mut y = [0u8; 65];
+            c.compute_y(&mut y);
+            assert_eq!(&t.Y, &y);
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_get_ZV_as_prover() {
+        for t in RFC_T {
+            let mut c = Spake2P::new();
+            let x = p256::Scalar::from_repr(
+                *elliptic_curve::generic_array::GenericArray::from_slice(&t.x),
+            )
+            .unwrap();
+            c.set_w0(&t.w0);
+            c.set_w1(&t.w1);
+            let Y = p256::EncodedPoint::from_bytes(t.Y).unwrap();
+            let Y = p256::AffinePoint::from_encoded_point(&Y).unwrap();
+            let N = p256::AffinePoint::from_encoded_point(&c.n).unwrap();
+            let (Z, V) = Spake2P::get_ZV_as_prover(c.w0, c.w1, N, Y, x);
+
+            assert_eq!(&t.Z, Z.as_bytes());
+            assert_eq!(&t.V, V.as_bytes());
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_get_ZV_as_verifier() {
+        for t in RFC_T {
+            let mut c = Spake2P::new();
+            let y = p256::Scalar::from_repr(
+                *elliptic_curve::generic_array::GenericArray::from_slice(&t.y),
+            )
+            .unwrap();
+            c.set_w0(&t.w0);
+            let X = p256::EncodedPoint::from_bytes(t.X).unwrap();
+            let X = p256::AffinePoint::from_encoded_point(&X).unwrap();
+            let L = p256::EncodedPoint::from_bytes(t.L).unwrap();
+            let L = p256::AffinePoint::from_encoded_point(&L).unwrap();
+            let M = p256::AffinePoint::from_encoded_point(&c.m).unwrap();
+            let (Z, V) = Spake2P::get_ZV_as_verifier(c.w0, L, M, X, y);
+
+            assert_eq!(&t.Z, Z.as_bytes());
+            assert_eq!(&t.V, V.as_bytes());
+        }
+    }
+
+    #[test]
+    fn test_transcript() {
+        for t in RFC_T {
+            let mut s2p = Spake2P::new();
+            s2p.set_random(&t.x);
+            s2p.set_w0(&t.w0);
+
+            let mut transcript = [0u8; 32];
+            s2p.verifier_transcript(
+                &[],
+                &t.X,
+                &t.Y,
+                &mut transcript
+            );
+            let mut k_e = [0; 16];
+            let mut c_a = [0; 32];
+            let mut c_b = [0; 32];
+            s2p.get_ke_and_ca_cb(&transcript, &t.X, &t.Y, &mut k_e, &mut c_a, &mut c_b);
+            assert_eq!(&k_e, &t.Ke);
+        }
     }
 }

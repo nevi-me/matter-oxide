@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use bytes::BytesMut;
 use exchange::ExchangeManager;
 use matter::{
     crypto::{CryptoKeyPair, KeyPair},
@@ -12,10 +13,18 @@ use matter::{
 use message::{Message, SessionType};
 use secure_channel::pake::{PAKEInteraction, PBKDFParamResponse, PBKDFParams, Pake2};
 use tokio::{
-    sync::{mpsc::Sender, RwLock},
+    sync::{
+        mpsc::{Receiver, Sender},
+        RwLock,
+    },
     task::JoinHandle,
 };
 use transport::udp::UdpInterface;
+
+use crate::{
+    crypto::fill_random,
+    message::{ExchangeFlags, MessageFlags, SecurityFlags},
+};
 
 #[macro_use]
 extern crate num_derive;
@@ -45,7 +54,7 @@ pub struct MatterController {
     last_node_id: i64,
     pake_session_ids: HashSet<u16>,
     exchange_manager: ExchangeManager,
-    message_sender: Sender<Message>,
+    message_sender: Sender<(Message, SocketAddr)>,
     udp: UdpInterface,
     message_store: Arc<RwLock<HashMap<(u16, SessionType), Message>>>,
 }
@@ -68,7 +77,7 @@ impl MatterController {
         to the exchange, and then polls at its level, sending messages appropriately?
         That isolates running the loop in one place, here.
          */
-        let (sender, receiver) = tokio::sync::mpsc::channel::<Message>(32);
+        let (sender, receiver) = tokio::sync::mpsc::channel::<(Message, SocketAddr)>(32);
         let local_address = "[::]:0".parse().unwrap();
         let udp = UdpInterface::new(local_address).await;
         let controller = Self {
@@ -76,19 +85,34 @@ impl MatterController {
             nodes: vec![],
             last_node_id: 0,
             pake_session_ids: HashSet::with_capacity(32),
-            exchange_manager: ExchangeManager::new(receiver),
+            exchange_manager: ExchangeManager::new(),
             message_sender: sender,
             udp,
             message_store: Arc::new(RwLock::new(HashMap::with_capacity(64))),
         };
         // TODO: this compiles, we should return the handle
-        controller.start().await;
+        controller.start(receiver).await;
+        println!("Controller started");
         controller
     }
 
-    pub async fn start(&self) -> JoinHandle<()> {
+    pub async fn start(&self, receiver: Receiver<(Message, SocketAddr)>) -> JoinHandle<()> {
         let recv_socket = self.udp.socket();
         let message_store = self.message_store.clone();
+
+        let udp = self.udp.clone();
+
+        tokio::spawn(async move {
+            let mut receiver = receiver;
+            while let Some((message, recipient)) = receiver.recv().await {
+                let mut buf = BytesMut::with_capacity(1024);
+                message.encode(&mut buf, None);
+                let buf = buf.to_vec();
+                println!("Sending message to {recipient}");
+                udp.send_to(&buf, recipient).await;
+            }
+            println!("Receiver stopped receiving messages")
+        });
 
         // Spawn a task to receive messages and process them
         tokio::spawn(async move {
@@ -97,7 +121,10 @@ impl MatterController {
                 let mut buf = [0u8; 1024];
                 let (len, peer) = recv_socket.recv_from(&mut buf).await.unwrap();
                 // Decode the message but not decrypt it
-                let message = Message::decode(&buf[..len]);
+                println!("Received from {peer} {}", hex::encode(&buf[..len]));
+                let mut message = Message::decode(&buf[..len]);
+                // TODO don't decrypt here, using it to test
+                message.decrypt(None);
                 let key = (
                     message.message_header.session_id,
                     message.message_header.session_type,
@@ -118,6 +145,7 @@ impl MatterController {
         discriminator: u8,
         pin: u64,
     ) {
+        println!("Commission with PIN");
         /*
         How do we send and receive simultaneously? We want MRP built in, so for each stage of commissioning,
         we would want to be able to retry sending until we get an ack. Then after processing, move to the
@@ -126,7 +154,12 @@ impl MatterController {
          */
         // TODO: Use a simple RNG
         let mut buf = [0; 2];
-        crate::crypto::fill_random(&mut buf);
+        fill_random(&mut buf);
+
+        let mut message_counter = [0; 4];
+        fill_random(&mut message_counter);
+        let message_counter = u32::from_le_bytes(message_counter);
+
         // TODO: move obtaining session IDs to the exchange manager.
         //       if there are multiple fabrics, we have to scope this to individual fabrics.
         let mut session_id = u16::from_le_bytes(buf);
@@ -134,34 +167,58 @@ impl MatterController {
             session_id += 1;
         }
         let session_type = SessionType::UnsecuredSession;
-        let mut pake_interaction = PAKEInteraction::initiator(session_id);
+        let exchange_id = self.exchange_manager.new_exchange_unsecured(session_id);
+        let mut pake_interaction =
+            PAKEInteraction::initiator(session_id, exchange_id, message_counter);
         // TODO: set pbkdf params if known
-
-        let exchange_id = self.exchange_manager.new_exchange(session_id);
 
         // Send param request
         let request_message = {
             let exchange = self.exchange_manager.find_exchange(exchange_id);
             pake_interaction.pbkdf_param_request(exchange.unsecured_session_context_mut())
         };
-        self.message_sender.send(request_message).await.unwrap();
-        let mut response_message = self.wait_for_message(session_id, session_type).await;
-        response_message.decrypt(None);
-        let pbkdf_param_response = PBKDFParamResponse::from_tlv(&response_message.payload);
-        let pake1_message = {
-            let exchange = self.exchange_manager.find_exchange(exchange_id);
-            pake_interaction.pake1(
-                exchange.unsecured_session_context_mut(),
-                &pbkdf_param_response,
-            )
+        self.message_sender
+            .send((request_message, remote_address))
+            .await
+            .unwrap();
+        println!("Waiting for response");
+        let mut response_message = self.wait_for_message(0, session_type).await;
+        // response_message.decrypt(None);
+        let next_ack = if response_message
+            .payload_header
+            .map(|h| h.exchange_flags.contains(ExchangeFlags::RELIABILITY))
+            .unwrap_or(false)
+        {
+            Some(response_message.message_header.message_counter)
+        } else {
+            None
         };
-        self.message_sender.send(pake1_message).await.unwrap();
-        let mut pake2_message = self.wait_for_message(session_id, session_type).await;
-        pake2_message.decrypt(None);
+        pake_interaction.set_pbkdf_param_response(response_message.payload.clone());
+        let mut pake1_message = {
+            let exchange = self.exchange_manager.find_exchange(exchange_id);
+            pake_interaction.pake1(exchange.unsecured_session_context_mut())
+        };
+        {
+            // Acknowledge previous response
+            let mut header = pake1_message.payload_header.as_mut().unwrap();
+            header
+                .exchange_flags
+                .set(ExchangeFlags::ACKNOWLDEGE, next_ack.is_some());
+            header.ack_message_counter = next_ack;
+        }
+        self.message_sender
+            .send((pake1_message, remote_address))
+            .await
+            .unwrap();
+        let mut pake2_message = self.wait_for_message(0, session_type).await;
+        // pake2_message.decrypt(None);
         let pake2 = Pake2::from_tlv(&pake2_message.payload);
         let pake3_message = pake_interaction.pake3(&pake2);
-        self.message_sender.send(pake3_message).await.unwrap();
-        let pake_finished_message = self.wait_for_message(session_id, session_type).await;
+        self.message_sender
+            .send((pake3_message, remote_address))
+            .await
+            .unwrap();
+        let pake_finished_message = self.wait_for_message(0, session_type).await;
 
         // Compute session encryption keys
         let (encryption_key, rest) = [0u8; 32 * 3].split_at(32);
@@ -189,8 +246,11 @@ impl MatterController {
         let key = (session_id, session_type);
         loop {
             // Check if there is a message
+            println!("Checking for message with key {key:?}");
             let has_key = {
                 let reader = self.message_store.read().await;
+                println!("There are {} messages", reader.len());
+                println!("{:?}", reader.keys());
                 reader.contains_key(&key)
             };
             if has_key {
@@ -246,11 +306,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "used for manual testing only"]
     async fn test_commissioning() {
         let mut controller = MatterController::new().await;
-        let remote_address = "[fdf5:c816:9a31:0:14de:f8f3:b5aa:f677]:5540"
-            .parse()
-            .unwrap();
+        let remote_address = "[::ffff:192.168.101.176]:5540".parse().unwrap();
         controller
             .commission_with_pin(remote_address, 250, 123456)
             .await;

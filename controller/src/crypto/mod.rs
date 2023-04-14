@@ -1,7 +1,6 @@
 use sha2::Sha256;
 
 pub(crate) mod keypair;
-pub(crate) mod other;
 pub(crate) mod sha256;
 pub(crate) mod spake2p;
 

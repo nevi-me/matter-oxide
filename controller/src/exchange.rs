@@ -12,9 +12,6 @@ use crate::{
 
 pub struct ExchangeManager {
     exchanges: HashMap<u16, Exchange>,
-
-    /// A global receiver of messages from exchanges
-    receiver: tokio::sync::mpsc::Receiver<Message>,
 }
 
 pub struct Exchange {
@@ -32,7 +29,7 @@ pub struct Exchange {
     point and then returns a response of what needs to be done, which the
     controller then handles? That could work.
      */
-    receiver: tokio::sync::mpsc::Receiver<Message>,
+    // receiver: tokio::sync::mpsc::Receiver<Message>,
 }
 
 pub enum ExchangeRole {
@@ -56,30 +53,27 @@ Each exchange could handle its messages
  */
 
 impl ExchangeManager {
-    pub fn new(receiver: Receiver<Message>) -> Self {
+    pub fn new() -> Self {
         Self {
             exchanges: HashMap::with_capacity(32),
-            receiver,
         }
     }
 
     /// Create a new exchange and return its Exchange ID
-    pub fn new_exchange(&mut self, session_id: u16) -> u16 {
-        let session_context = SessionContext::Secure(SecureSessionContext {
-            session_type: SecureSessionType::Pase,
+    pub fn new_exchange_unsecured(&mut self, session_id: u16) -> u16 {
+        let session_context = SessionContext::Unsecured(UnsecuredSessionContext {
             session_role: SessionRole::Initiator,
             local_session_id: session_id,
             peer_session_id: 0,
-            i2r_key: (),
-            r2i_key: (),
-            shared_secret: (),
-            local_message_counter: 10001,
+            ephemeral_initiator_node_id: 0,
             message_reception_state: (),
-            local_fabric_index: 1,
-            peer_node_id: 1,
-            resumption_id: 1,
-            session_timestamp: 0,
-            active_timestamp: 0,
+            // local_message_counter: 10001,
+            // message_reception_state: (),
+            // local_fabric_index: 1,
+            // peer_node_id: 1,
+            // resumption_id: 1,
+            // session_timestamp: 0,
+            // active_timestamp: 0,
         });
         let exchange = Exchange::initiator(session_id, session_context);
         let exchange_id = exchange.exchange_id;
@@ -107,10 +101,10 @@ impl Exchange {
             exchange_role: ExchangeRole::Initiator,
             session_context,
             message_counter: MessageCounter::new(),
-            acknowledgements: todo!(),
-            retransmissions: todo!(),
+            acknowledgements: (),
+            retransmissions: (),
             sender: (),
-            receiver: todo!(),
+            // receiver: todo!(),
         }
     }
 

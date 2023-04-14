@@ -51,15 +51,16 @@ impl Message {
     pub fn decode(mut buf: &[u8]) -> Self {
         // Perform validity checks
         let message_flags = MessageFlags::from_bits(buf.get_u8()).unwrap();
-        dbg!(message_flags);
+        // dbg!(message_flags);
         if (message_flags & MessageFlags::FORMAT_INVALID).bits() > 0 {
             panic!("Invalid version")
         }
 
         let session_id = buf.get_u16_le();
+        // dbg!(session_id);
 
         let security_flags = SecurityFlags::from_bits(buf.get_u8()).unwrap();
-        dbg!(security_flags);
+        // dbg!(security_flags);
         if security_flags.contains(SecurityFlags::SESSION_UNICAST)
             && message_flags.contains(MessageFlags::DSIZ_16_BIT_GROUP_ID)
         {
@@ -68,11 +69,11 @@ impl Message {
         // TODO 1.c
         // 2. If message is not of unsecured session type
         let session_type = SessionType::new(security_flags, session_id);
-        dbg!(&session_type);
+        // dbg!(&session_type);
 
         // Message counter
         let message_counter = buf.get_u32_le();
-        dbg!(message_counter);
+        // dbg!(message_counter);
 
         // Source and destination node ID
         let source_node_id = if message_flags.contains(MessageFlags::SOURCE_NODE_ID_PRESENT) {
@@ -80,7 +81,7 @@ impl Message {
         } else {
             None
         };
-        dbg!(source_node_id);
+        // dbg!(source_node_id);
 
         let dest_node_id = if message_flags.contains(MessageFlags::DSIZ_64_BIT_NODE_ID) {
             Some(NodeID::Unique(buf.get_u64_le()))
@@ -91,7 +92,7 @@ impl Message {
         } else {
             None
         };
-        dbg!(dest_node_id);
+        // dbg!(dest_node_id);
 
         // Message extensions (4.4.1.8)
         if security_flags.contains(SecurityFlags::MESSAGE_EXT) {
@@ -99,7 +100,7 @@ impl Message {
         }
 
         Self {
-            message_header: MessageHeader {
+            message_header: dbg!(MessageHeader {
                 session_type,
                 message_flags,
                 session_id,
@@ -108,7 +109,7 @@ impl Message {
                 source_node_id,
                 dest_node_id,
                 message_extensions: (),
-            },
+            }),
             payload_header: None,
             payload: buf.to_vec(),
             integrity_check: None,
@@ -118,14 +119,13 @@ impl Message {
         // Protocol Header Field Descriptions (4.4.3)
         let mut buf = BytesMut::from(&self.payload[..]);
         let flag = buf.get_u8() & 0b00011111;
-        println!("{:08b} {flag}", flag);
+        // println!("{:08b} {flag}", flag);
         let exchange_flags = ExchangeFlags::from_bits(flag).unwrap();
-        dbg!(exchange_flags);
+        // dbg!(exchange_flags);
         let protocol_opcode = buf.get_u8();
-        dbg!(protocol_opcode); // TODO: convert to an enum
+        // dbg!(protocol_opcode); // TODO: convert to an enum
         let exchange_id = buf.get_u16_le();
         let protocol_id = buf.get_u16_le();
-        println!("{protocol_id:X?} {protocol_id}");
         let protocol_vendor_id = if exchange_flags.contains(ExchangeFlags::VENDOR) {
             Some(buf.get_u16_le())
         } else {
@@ -140,7 +140,7 @@ impl Message {
             todo!("Secured extensions not yet implemented");
         }
 
-        self.payload_header = Some(ProtocolHeader {
+        self.payload_header = Some(dbg!(ProtocolHeader {
             exchange_flags,
             protocol_opcode,
             exchange_id,
@@ -148,9 +148,9 @@ impl Message {
             protocol_vendor_id,
             ack_message_counter,
             secured_extensions: (),
-        });
+        }));
 
-        self.payload = self.payload.to_vec();
+        self.payload = buf.to_vec();
     }
 
     pub fn encode(&self, out: &mut BytesMut, encryption_key: Option<&[u8]>) {
@@ -331,8 +331,10 @@ mod tests {
 
     #[test]
     fn test_decode() {
-        let buf = hex_literal::hex!("040000000a4ff2177ea0c8a7cb6a63520520d3640000153001204715a406c6b0496ad52039e347db8528cb69a1cb2fce6f2318552ae65e103aca250233dc240300280435052501881325022c011818");
-        let message = Message::decode(&buf);
+        let buf = hex_literal::hex!("01000000e30ba008e8030000000000000621000000000000000015300120c3bf6a81dda5b85c626a582fdaf855cb7085ee308c8976954544afe814cca1a3300220b7b386219f54d57c39273a93b91a16a9232f209c4a0c8b7ff14ccb73434a24bf24030135042501d007300220f84523aa2486f48877a672c8146dafbdf531360ac8d8915d6027da1abc83193c1818");
+        let mut message = Message::decode(&buf);
+        message.decrypt(None);
+        dbg!(message);
     }
 
     #[test]

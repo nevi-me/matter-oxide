@@ -1,5 +1,5 @@
 use crate::{
-    message::{Message, MessageHeader, ProtocolHeader},
+    message::{Message, MessageHeader},
     session_context::SecureSessionContext,
 };
 
