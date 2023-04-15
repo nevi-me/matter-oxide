@@ -10,3 +10,5 @@ pub const SHA256_HASH_LEN_BYTES: usize = 32;
 pub const EC_SIGNATURE_LEN_BYTES: usize = 64;
 pub const SPAKE2P_CONTEXT_PREFIX: [u8; 26] = *b"CHIP PAKE V1 Commissioning";
 pub const SPAKE2P_KEY_CONFIRM_INFO: [u8; 16] = *b"ConfirmationKeys";
+pub const SESSION_KEYS_INFO: [u8; 11] = *b"SessionKeys";
+pub const SESSION_RESUMPTION_KEYS_INFO: [u8; 21] = *b"SessionResumptionKeys";

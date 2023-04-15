@@ -11,7 +11,7 @@ use matter::{
     fabric::Fabric,
 };
 use message::{Message, SessionType};
-use secure_channel::pake::{PAKEInteraction, PBKDFParamResponse, PBKDFParams, Pake2};
+use secure_channel::pake::{PAKEInteraction, Pake2};
 use tokio::{
     sync::{
         mpsc::{Receiver, Sender},
@@ -23,7 +23,8 @@ use transport::udp::UdpInterface;
 
 use crate::{
     crypto::fill_random,
-    message::{ExchangeFlags, MessageFlags, SecurityFlags},
+    message::status_report::{GeneralCode, StatusReport},
+    session_context::{SecureChannelProtocolID, SecureSessionContext},
 };
 
 #[macro_use]
@@ -143,7 +144,7 @@ impl MatterController {
         &mut self,
         remote_address: SocketAddr,
         discriminator: u8,
-        pin: u64,
+        pin: u32,
     ) {
         println!("Commission with PIN");
         /*
@@ -169,7 +170,7 @@ impl MatterController {
         let session_type = SessionType::UnsecuredSession;
         let exchange_id = self.exchange_manager.new_exchange_unsecured(session_id);
         let mut pake_interaction =
-            PAKEInteraction::initiator(session_id, exchange_id, message_counter);
+            PAKEInteraction::initiator(pin, session_id, exchange_id, message_counter);
         // TODO: set pbkdf params if known
 
         // Send param request
@@ -181,48 +182,51 @@ impl MatterController {
             .send((request_message, remote_address))
             .await
             .unwrap();
-        println!("Waiting for response");
-        let mut response_message = self.wait_for_message(0, session_type).await;
+        let response_message = self.wait_for_message(0, session_type).await;
         // response_message.decrypt(None);
-        let next_ack = if response_message
-            .payload_header
-            .map(|h| h.exchange_flags.contains(ExchangeFlags::RELIABILITY))
-            .unwrap_or(false)
-        {
-            Some(response_message.message_header.message_counter)
-        } else {
-            None
-        };
+        let next_ack = response_message.next_ack();
+
+        let peer_session_id = response_message.message_header.session_id;
         pake_interaction.set_pbkdf_param_response(response_message.payload.clone());
         let mut pake1_message = {
             let exchange = self.exchange_manager.find_exchange(exchange_id);
             pake_interaction.pake1(exchange.unsecured_session_context_mut())
         };
-        {
-            // Acknowledge previous response
-            let mut header = pake1_message.payload_header.as_mut().unwrap();
-            header
-                .exchange_flags
-                .set(ExchangeFlags::ACKNOWLDEGE, next_ack.is_some());
-            header.ack_message_counter = next_ack;
-        }
+        // Acknowledge previous response
+        pake1_message.with_ack(next_ack);
         self.message_sender
             .send((pake1_message, remote_address))
             .await
             .unwrap();
         let mut pake2_message = self.wait_for_message(0, session_type).await;
         // pake2_message.decrypt(None);
+        let next_ack = pake2_message.next_ack();
         let pake2 = Pake2::from_tlv(&pake2_message.payload);
-        let pake3_message = pake_interaction.pake3(&pake2);
+        let mut pake3_message = pake_interaction.pake3(&pake2);
+        pake3_message.with_ack(next_ack);
         self.message_sender
             .send((pake3_message, remote_address))
             .await
             .unwrap();
         let pake_finished_message = self.wait_for_message(0, session_type).await;
+        let next_ack = pake_finished_message.next_ack();
 
-        // Compute session encryption keys
-        let (encryption_key, rest) = [0u8; 32 * 3].split_at(32);
-        let (decryption_key, attestation_challenge) = rest.split_at(32);
+        // Check that commissioning is successful
+        let payload_header = pake_finished_message.payload_header.as_ref().unwrap();
+        assert_eq!(
+            payload_header.protocol_opcode,
+            SecureChannelProtocolID::StatusReport as u8
+        );
+        let status_report = StatusReport::from_payload(&pake_finished_message.payload);
+        assert_eq!(status_report.general_code, GeneralCode::Success);
+
+        // Get secrets
+        let (k_e, c_a, c_b) = pake_interaction.get_secrets();
+
+        // Create a new secured session
+        let mut secured_session =
+            SecureSessionContext::new_pase(true, false, session_id, peer_session_id, k_e, &[]);
+        drop(pake_interaction);
 
         /*
         How do we know when we've received a message that's moved the processing forward?
@@ -246,11 +250,11 @@ impl MatterController {
         let key = (session_id, session_type);
         loop {
             // Check if there is a message
-            println!("Checking for message with key {key:?}");
+            // println!("Checking for message with key {key:?}");
             let has_key = {
                 let reader = self.message_store.read().await;
-                println!("There are {} messages", reader.len());
-                println!("{:?}", reader.keys());
+                // println!("There are {} messages", reader.len());
+                // println!("{:?}", reader.keys());
                 reader.contains_key(&key)
             };
             if has_key {

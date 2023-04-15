@@ -4,6 +4,8 @@ use bytes::{Buf, BufMut, BytesMut};
 
 use crate::crypto::encrypt_in_place;
 
+pub mod status_report;
+
 pub const UDP_MESSAGE_LIMIT: usize = 1280;
 
 pub type SessionID = u16;
@@ -100,7 +102,7 @@ impl Message {
         }
 
         Self {
-            message_header: dbg!(MessageHeader {
+            message_header: MessageHeader {
                 session_type,
                 message_flags,
                 session_id,
@@ -109,7 +111,7 @@ impl Message {
                 source_node_id,
                 dest_node_id,
                 message_extensions: (),
-            }),
+            },
             payload_header: None,
             payload: buf.to_vec(),
             integrity_check: None,
@@ -140,7 +142,7 @@ impl Message {
             todo!("Secured extensions not yet implemented");
         }
 
-        self.payload_header = Some(dbg!(ProtocolHeader {
+        self.payload_header = Some(ProtocolHeader {
             exchange_flags,
             protocol_opcode,
             exchange_id,
@@ -148,7 +150,7 @@ impl Message {
             protocol_vendor_id,
             ack_message_counter,
             secured_extensions: (),
-        }));
+        });
 
         self.payload = buf.to_vec();
     }
@@ -161,6 +163,29 @@ impl Message {
         // If there is an encryption key, encrypt the payload
         self.payload_header.as_ref().unwrap().encode(out);
         out.put_slice(&self.payload);
+    }
+
+    /// Add an acknowledgement to the message. Useful to add after consruction.
+    pub fn with_ack(&mut self, ack: Option<u32>) {
+        let mut payload_header = self.payload_header.as_mut().unwrap();
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::ACKNOWLDEGE, ack.is_some());
+        payload_header.ack_message_counter = ack;
+    }
+
+    /// Get the next acknowledgement counter if it is required by sender
+    pub fn next_ack(&self) -> Option<u32> {
+        if self
+            .payload_header
+            .as_ref()
+            .map(|header| header.exchange_flags.contains(ExchangeFlags::RELIABILITY))
+            .unwrap_or_default()
+        {
+            Some(self.message_header.message_counter)
+        } else {
+            None
+        }
     }
 }
 

@@ -22,7 +22,8 @@ We want to store details about the session context here, or should we store this
 in the session context? What else gets stored in the unsecured session context?
 */
 pub struct PAKEInteraction {
-    spake2p: Spake2P,
+    spake2p: Option<Spake2P>,
+    passcode: u32,
     pbkdf_param_request: Vec<u8>,
     pbkdf_param_response: Vec<u8>,
     /// Respondent can set these at the beginning if known or when generated.
@@ -36,12 +37,20 @@ pub struct PAKEInteraction {
     message_counter: u32,
     // Some internal storage
     c_a: [u8; CRYPTO_HASH_LEN_BYTES],
+    c_b: [u8; CRYPTO_HASH_LEN_BYTES],
+    k_e: [u8; 16],
 }
 
 impl PAKEInteraction {
-    pub fn initiator(session_id: u16, exchange_id: u16, message_counter: u32) -> Self {
+    pub fn initiator(
+        passcode: u32,
+        session_id: u16,
+        exchange_id: u16,
+        message_counter: u32,
+    ) -> Self {
         Self {
-            spake2p: Spake2P::new(),
+            passcode,
+            spake2p: None,
             initiator_session_id: session_id,
             responder_session_id: 0,
             exchange_id,
@@ -50,17 +59,21 @@ impl PAKEInteraction {
             pbkdf_param_response: vec![],
             pbkdf_params: None,
             c_a: Default::default(),
+            c_b: Default::default(),
+            k_e: Default::default(),
         }
     }
 
     pub fn responder(
+        passcode: u32,
         session_id: u16,
         exchange_id: u16,
         message_counter: u32,
         pbkdf_params: Option<PBKDFParams>,
     ) -> Self {
         Self {
-            spake2p: Spake2P::new(),
+            passcode,
+            spake2p: None,
             initiator_session_id: 0,
             exchange_id,
             message_counter,
@@ -69,6 +82,8 @@ impl PAKEInteraction {
             pbkdf_param_response: vec![],
             pbkdf_params,
             c_a: Default::default(),
+            c_b: Default::default(),
+            k_e: Default::default(),
         }
     }
 
@@ -170,26 +185,21 @@ impl PAKEInteraction {
     pub fn pake1(&mut self, session_context: &mut UnsecuredSessionContext) -> Message {
         let request = PBKDFParamResponse::from_tlv(&self.pbkdf_param_response);
         session_context.peer_session_id = request.responder_session_id;
-        // Generate Crypto_PAKEValues_Initiator
-        let mut w0w1 = [0; 2 * CRYPTO_W_SIZE_BYTES];
-        // TODO: passcode hardcoded for now
+
         if self.pbkdf_params.is_none() {
             self.pbkdf_params = request.pbkdf_params.clone();
             // Return an error if responder didn't send params
             assert!(self.pbkdf_params.is_some());
         }
         let PBKDFParams { iterations, salt } = request.pbkdf_params.as_ref().unwrap();
-        pbkdf2_hmac(&123456u32.to_le_bytes(), *iterations as _, salt, &mut w0w1);
-        let (w0s, w1s) = w0w1.split_at(CRYPTO_W_SIZE_BYTES);
-        self.spake2p.set_w0_from_w0s(w0s);
-        self.spake2p.set_w1_from_w1s(w1s);
-        self.spake2p.set_l_from_w1s(w1s);
-        // Generate pA
-        let mut p_a = [0; CRYPTO_PUBLIC_KEY_SIZE_BYTES];
-        self.spake2p.compute_x(&mut p_a);
+        let s2p = Spake2P::new(self.passcode, *iterations as u16, salt, true);
 
-        let pake1 = Pake1 { p_a };
+        let pake1 = Pake1 {
+            p_a: s2p.our_key_share().try_into().unwrap(),
+        };
         let encoded = pake1.to_tlv();
+
+        self.spake2p = Some(s2p);
 
         // DRY: Payload header
         let mut payload_header = ProtocolHeader::default();
@@ -211,81 +221,87 @@ impl PAKEInteraction {
         }
     }
     pub fn pake2(&mut self, request: &Pake1) -> Message {
-        // Generate Crypto_PAKEValues_Initiator
-        let mut w0w1 = [0; 2 * CRYPTO_W_SIZE_BYTES];
-        let PBKDFParams {iterations, salt} = &self.pbkdf_params.as_ref().unwrap();
-        pbkdf2_hmac(&123456u32.to_le_bytes(), *iterations as usize, salt, &mut w0w1);
-        let (w0s, w1s) = w0w1.split_at(CRYPTO_W_SIZE_BYTES);
-        self.spake2p.set_w0_from_w0s(w0s);
-        self.spake2p.set_w1_from_w1s(w1s);
-        self.spake2p.set_l_from_w1s(w1s);
-        // Compute pB
-        let mut p_b = [0; CRYPTO_PUBLIC_KEY_SIZE_BYTES];
-        self.spake2p.compute_y(&mut p_b);
-        // TODO: DRY
-        let mut hash = [0; SHA256_HASH_LEN_BYTES];
-        let mut context = crypto_sha256::Sha256::new();
-        context.update(&SPAKE2P_CONTEXT_PREFIX);
-        // TODO: maybe store bytes so we don't do this twice
-        context.update(&self.pbkdf_param_request);
-        context.update(&self.pbkdf_param_response);
-        context.finish(&mut hash);
+        let PBKDFParams { iterations, salt } = self.pbkdf_params.as_ref().unwrap();
+        let mut s2p = Spake2P::new(self.passcode, *iterations as _, salt, false);
+        s2p.compute_peer_key_share(&request.p_a);
+
+        // Build context
+        let mut context = [0; SHA256_HASH_LEN_BYTES];
+        let mut hasher = crypto_sha256::Sha256::new();
+        hasher.update(&SPAKE2P_CONTEXT_PREFIX);
+        hasher.update(&self.pbkdf_param_request);
+        hasher.update(&self.pbkdf_param_response);
+        hasher.finish(&mut context);
+
         // Compute (cA, cB, Ke)
         let mut k_e = [0; 16];
+        let mut c_a = [0; CRYPTO_HASH_LEN_BYTES];
         let mut c_b = [0; CRYPTO_HASH_LEN_BYTES];
-        self.spake2p
-            .get_ke_and_ca_cb(&hash, &request.p_a, &p_b, &mut k_e, &mut self.c_a, &mut c_b);
-        println!("p_a {}", hex::encode(request.p_a));
-        println!("p_b {}", hex::encode(p_b));
-        println!("k_e {}", hex::encode(k_e));
-        println!("c_a {}", hex::encode(self.c_a));
-        println!("c_b {}", hex::encode(c_b));
-        let pake2 = Pake2 { p_b, c_b };
+        s2p.compute_key_schedule(&context, &mut k_e, &mut c_a, &mut c_b);
+
+        let pake2 = Pake2 {
+            p_b: s2p.our_key_share().try_into().unwrap(),
+            c_b,
+        };
         let encoded = pake2.to_tlv();
+
+        // Store values
+        self.spake2p = Some(s2p);
+        self.c_a = c_a;
+        self.c_b = c_b;
+        self.k_e = k_e;
 
         Message {
             message_header: self.message_header(),
-            payload_header: None,
+            payload_header: None, // TODO
             payload: encoded.to_slice().to_vec(),
             integrity_check: None,
         }
     }
     pub fn pake3(&mut self, request: &Pake2) -> Message {
-        // TODO: DRY
-        let mut hash = [0; SHA256_HASH_LEN_BYTES];
-        let mut context = crypto_sha256::Sha256::new();
-        context.update(&SPAKE2P_CONTEXT_PREFIX);
-        context.update(&self.pbkdf_param_request);
-        context.update(&self.pbkdf_param_response);
-        context.finish(&mut hash);
-        // Compute transcript
-        let mut transcript = [0; SHA256_HASH_LEN_BYTES];
-        self.spake2p
-            .prover_transcript(&hash, self.spake2p.get_x(), &request.p_b, &mut transcript);
+        // TODO: can provide these to spake2p to avoid repetition
+        let mut context = [0; SHA256_HASH_LEN_BYTES];
+        let mut hasher = crypto_sha256::Sha256::new();
+        hasher.update(&SPAKE2P_CONTEXT_PREFIX);
+        hasher.update(&self.pbkdf_param_request);
+        hasher.update(&self.pbkdf_param_response);
+        hasher.finish(&mut context);
+
         // Compute (cA, cB, Ke)
         let mut k_e = [0; 16];
+        let mut c_a = [0; CRYPTO_HASH_LEN_BYTES];
         let mut c_b = [0; CRYPTO_HASH_LEN_BYTES];
-        self.spake2p.get_ke_and_ca_cb(
-            &hash,
-            self.spake2p.get_x(),
-            &request.p_b,
-            &mut k_e,
-            &mut self.c_a,
-            &mut c_b,
-        );
-        println!("p_a {}", hex::encode(self.spake2p.get_x()));
-        println!("p_b {}", hex::encode(request.p_b));
-        println!("k_e {}", hex::encode(k_e));
-        println!("c_a {}", hex::encode(self.c_a));
-        println!("c_b {}", hex::encode(c_b));
-        println!("r.c_b {}", hex::encode(request.c_b));
+        let s2p = self.spake2p.as_mut().unwrap();
+        s2p.compute_peer_key_share(&request.p_b);
+        s2p.compute_key_schedule(&context, &mut k_e, &mut c_a, &mut c_b);
+
         // Verify Pake2.cB against cB
         assert_eq!(c_b, request.c_b);
 
+        // DRY: Payload header
+        let mut payload_header = ProtocolHeader::default();
+        payload_header.exchange_id = self.exchange_id;
+        // Secure channel by default
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::INITIATOR, true);
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::RELIABILITY, true);
+        payload_header.protocol_opcode = SecureChannelProtocolID::PASEPake3 as _;
+
+        let pake3 = Pake3 { c_a };
+        let encoded = pake3.to_tlv();
+
+        // Store values
+        self.c_a = c_a;
+        self.c_b = c_b;
+        self.k_e = k_e;
+
         Message {
             message_header: self.message_header(),
-            payload_header: None,
-            payload: vec![],
+            payload_header: Some(payload_header),
+            payload: encoded.to_slice().to_vec(),
             integrity_check: None,
         }
     }
@@ -307,6 +323,9 @@ impl PAKEInteraction {
 
     pub fn set_pbkdf_param_response(&mut self, value: Vec<u8>) {
         self.pbkdf_param_response = value;
+    }
+    pub fn get_secrets(&self) -> (&[u8; 16], &[u8; 32], &[u8; 32]) {
+        (&self.k_e, &self.c_a, &self.c_b)
     }
     fn message_header(&mut self) -> MessageHeader {
         let mut message_header = MessageHeader::new(0);

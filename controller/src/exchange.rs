@@ -2,12 +2,8 @@ use std::collections::HashMap;
 
 use tokio::sync::mpsc::Receiver;
 
-use crate::{
-    message::Message,
-    session_context::{
-        SecureSessionContext, SecureSessionType, SessionContext, SessionRole,
-        UnsecuredSessionContext,
-    },
+use crate::session_context::{
+    SecureSessionContext, SecureSessionType, SessionContext, SessionRole, UnsecuredSessionContext,
 };
 
 pub struct ExchangeManager {

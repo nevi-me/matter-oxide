@@ -1,3 +1,3 @@
 pub mod state;
-#[cfg(test)]
-pub mod test_vectors;
+/// A source of time
+pub mod time;
