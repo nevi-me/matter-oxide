@@ -1,8 +1,6 @@
-use matter::crypto::KeyPair;
-
 pub(crate) struct RootCertificateManager {
     root_cert_id: u64,
-    root_keypair: KeyPair,
+    root_keypair: (),
     root_key_identifier: [u8; 20],
     root_cert: [u8; 64], // TODO
     next_cert_id: u64,

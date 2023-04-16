@@ -2,17 +2,17 @@ use crate::{data_model::Attribute, interaction_model::CommandRequest};
 
 pub mod boolean_state;
 pub mod level;
-pub mod on_off;
-pub mod utility;
+// pub mod on_off;
+// pub mod utility;
 
 /// Revision History
 /// Classification
 /// Cluster Identifiers
 /// Attributes
 /// Data Types
-trait Cluster {
-    fn base(&self) -> &ClusterBase;
-    fn base_mut(&mut self) -> &mut ClusterBase;
+trait Cluster<'a> {
+    fn base(&'a self) -> &ClusterBase<'a>;
+    fn base_mut(&mut self) -> &mut ClusterBase<'a>;
     fn try_attribute_default(attribute_value: u16) -> Option<Attribute>;
 }
 
@@ -38,12 +38,13 @@ trait ClusterServer {
     fn handle_command(&mut self, command: CommandRequest);
 }
 
-pub struct ClusterBase {
+pub struct ClusterBase<'a> {
     pub id: u16,
     pub classification: ClusterClassification,
     pub revision: u8,
     pub features: (), // big flags for FeatureMap
-    pub attributes: Vec<Attribute>,
+    pub attributes: &'a [Attribute],
+    // pub _phantom: core::marker::PhantomData<&'a ()>,
 }
 
 pub struct BasicInformationCluster {

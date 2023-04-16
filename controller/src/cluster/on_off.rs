@@ -9,8 +9,8 @@ use super::{Cluster, ClusterBase, ClusterServer};
 
 pub const CLUSTER_ID_ON_OFF: u16 = 0x0006;
 
-pub struct OnOffCluster {
-    pub base: ClusterBase,
+pub struct OnOffCluster<'a> {
+    pub base: ClusterBase<'a>,
 }
 
 #[repr(u16)]
@@ -40,26 +40,27 @@ pub enum Commands {
     OWithTimedOff = 0x42,
 }
 
-// TODO(spec): make it conformant
-/// A default on/off cluster that complies with mandatory requirements
-impl Default for OnOffCluster {
-    fn default() -> Self {
-        let base = ClusterBase {
-            id: CLUSTER_ID_ON_OFF,
-            classification: ClusterClassification::Application,
-            revision: 4,
-            features: (),
-            attributes: vec![
-                Self::attribute_default(Attributes::OnOff),
-                Self::attribute_default(Attributes::GlobalSceneControl),
-            ],
-        };
+// // TODO(spec): make it conformant
+// /// A default on/off cluster that complies with mandatory requirements
+// impl<'a> Default for OnOffCluster<'a> {
+//     fn default() -> Self {
+//         let base = ClusterBase {
+//             id: CLUSTER_ID_ON_OFF,
+//             classification: ClusterClassification::Application,
+//             revision: 4,
+//             features: (),
+//             attributes: &[
+//                 Self::attribute_default(Attributes::OnOff),
+//                 Self::attribute_default(Attributes::GlobalSceneControl),
+//             ],
+//             _phantom: core::marker::PhantomData::default(),
+//         };
 
-        Self { base }
-    }
-}
+//         Self { base }
+//     }
+// }
 
-impl Cluster for OnOffCluster {
+impl<'a> Cluster for OnOffCluster<'a> {
     fn base(&self) -> &ClusterBase {
         &self.base
     }
@@ -74,7 +75,7 @@ impl Cluster for OnOffCluster {
     }
 }
 
-impl OnOffCluster {
+impl<'a> OnOffCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::OnOff => Attribute {
@@ -112,11 +113,11 @@ impl OnOffCluster {
     }
 }
 
-pub struct OnOffClusterServer {
-    cluster: OnOffCluster,
+pub struct OnOffClusterServer<'a> {
+    cluster: OnOffCluster<'a>,
 }
 
-impl ClusterServer for OnOffClusterServer {
+impl<'a> ClusterServer for OnOffClusterServer<'a> {
     fn read_attribute(&self) {
         todo!()
     }

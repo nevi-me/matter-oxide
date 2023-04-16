@@ -9,8 +9,8 @@ use super::{Cluster, ClusterBase};
 
 pub const CLUSTER_ID_BOOLEAN_STATE: u16 = 0x0045;
 
-pub struct BooleanStateCluster {
-    pub base: ClusterBase,
+pub struct BooleanStateCluster<'a> {
+    pub base: ClusterBase<'a>,
 }
 
 #[repr(u16)]
@@ -29,28 +29,29 @@ pub enum Event {
     StateChange(bool),
 }
 
-// TODO(spec): make it conformant
-/// A default XXXX cluster that complies with mandatory requirements
-impl Default for BooleanStateCluster {
-    fn default() -> Self {
-        let base = ClusterBase {
-            id: CLUSTER_ID_BOOLEAN_STATE,
-            classification: ClusterClassification::Application,
-            revision: 1,
-            features: (), // TODO
-            attributes: vec![Self::attribute_default(Attributes::StateValue)],
-        };
+// // TODO(spec): make it conformant
+// /// A default XXXX cluster that complies with mandatory requirements
+// impl<'a> Default for BooleanStateCluster<'a> {
+//     fn default() -> Self {
+//         let base = ClusterBase {
+//             id: CLUSTER_ID_BOOLEAN_STATE,
+//             classification: ClusterClassification::Application,
+//             revision: 1,
+//             features: (), // TODO
+//             attributes: &[Self::attribute_default(Attributes::StateValue)],
+//             _phantom: core::marker::PhantomData::default(),
+//         };
 
-        Self { base }
-    }
-}
+//         Self { base }
+//     }
+// }
 
-impl Cluster for BooleanStateCluster {
-    fn base(&self) -> &ClusterBase {
+impl<'a> Cluster<'a> for BooleanStateCluster<'a> {
+    fn base(&self) -> &ClusterBase<'a> {
         &self.base
     }
 
-    fn base_mut(&mut self) -> &mut ClusterBase {
+    fn base_mut(&mut self) -> &mut ClusterBase<'a> {
         &mut self.base
     }
 
@@ -60,7 +61,7 @@ impl Cluster for BooleanStateCluster {
     }
 }
 
-impl BooleanStateCluster {
+impl<'a> BooleanStateCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::StateValue => Attribute {

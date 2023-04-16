@@ -5,15 +5,24 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+std = [
+    "serde_json/std",
+    "hex/std",
+    "rand/std",
+    "x509-cert/std"
+]
+default = ["std"]
+# default = []
+
 [dependencies]
 matter = { git = "https://github.com/project-chip/matter-rs", package= "matter-iot", default-features = false, features = ["crypto_rustcrypto"] }
 libmdns = "0.7"
 mdns = "3"
-hex = "0.4"
-rand = "0.8.5"
+
 
 ## requires std
-serde_json = { default-features = false, features = ["std"] }
+serde_json = { version = "1", default-features = false, optional = true }
 
 ## no_std by default
 num = "0.4"
@@ -34,9 +43,11 @@ p256 = { version = "0.13.0", default-features = false, features = ["arithmetic",
 elliptic-curve = { version = "0.13.2" }
 crypto-bigint = { version = "0.4", default-features = false }
 ## requires std
-x509-cert = { version = "0.2.0", default-features = false, features = ["pem", "std"] }
+x509-cert = { version = "0.2.0", default-features = false, features = ["pem"] }
 
 ## optional no_std
+hex = { version = "0.4", default-features = false }
+rand = { version = "0.8", default-features = false }
 serde = { version =  "1", default-features = false, features = ["derive"] }
 once_cell = { version = "1", default-features = false, features = [] }
 

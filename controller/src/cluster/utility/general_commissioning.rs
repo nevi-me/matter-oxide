@@ -8,8 +8,8 @@ use crate::{
 
 pub const CLUSTER_ID_GENERAL_COMMISSIONING: u16 = 0x0030;
 
-pub struct GeneralCommissioningCluster {
-    pub base: ClusterBase,
+pub struct GeneralCommissioningCluster<'a> {
+    pub base: ClusterBase<'a>,
 }
 
 #[repr(u16)]
@@ -53,23 +53,24 @@ pub enum Commands {
     // ...
 }
 
-// TODO(spec): make it conformant
-/// A default XXXX cluster that complies with mandatory requirements
-impl Default for GeneralCommissioningCluster {
-    fn default() -> Self {
-        let base = ClusterBase {
-            id: CLUSTER_ID_GENERAL_COMMISSIONING,
-            classification: ClusterClassification::Utility,
-            revision: 1,
-            features: (), // TODO
-            attributes: vec![Self::attribute_default(Attributes::Breadcrumb)],
-        };
+// // TODO(spec): make it conformant
+// /// A default XXXX cluster that complies with mandatory requirements
+// impl<'a> Default for GeneralCommissioningCluster<'a> {
+//     fn default() -> Self {
+//         let base = ClusterBase {
+//             id: CLUSTER_ID_GENERAL_COMMISSIONING,
+//             classification: ClusterClassification::Utility,
+//             revision: 1,
+//             features: (), // TODO
+//             attributes: &[Self::attribute_default(Attributes::Breadcrumb)],
+//             _phantom: core::marker::PhantomData::default(),
+//         };
 
-        Self { base }
-    }
-}
+//         Self { base }
+//     }
+// }
 
-impl Cluster for GeneralCommissioningCluster {
+impl<'a> Cluster for GeneralCommissioningCluster<'a> {
     fn base(&self) -> &ClusterBase {
         &self.base
     }
@@ -84,7 +85,7 @@ impl Cluster for GeneralCommissioningCluster {
     }
 }
 
-impl GeneralCommissioningCluster {
+impl<'a> GeneralCommissioningCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::Breadcrumb => Attribute {

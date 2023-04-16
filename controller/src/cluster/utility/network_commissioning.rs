@@ -9,8 +9,8 @@ use crate::cluster::{Cluster, ClusterBase};
 
 pub const CLUSTER_ID_AAAA: u16 = 0x0031;
 
-pub struct XXXXCluster {
-    pub base: ClusterBase,
+pub struct XXXXCluster<'a> {
+    pub base: ClusterBase<'a>,
 }
 
 #[repr(u16)]
@@ -77,23 +77,24 @@ pub enum NetworkCommissioningStatus {
     UnknownError = 12,
 }
 
-// TODO(spec): make it conformant
-/// A default XXXX cluster that complies with mandatory requirements
-impl Default for XXXXCluster {
-    fn default() -> Self {
-        let base = ClusterBase {
-            id: CLUSTER_ID_AAAA,
-            classification: ClusterClassification::Utility,
-            revision: 1,
-            features: (), // TODO
-            attributes: vec![Self::attribute_default(Attributes::MaxNetworks)],
-        };
+// // TODO(spec): make it conformant
+// /// A default XXXX cluster that complies with mandatory requirements
+// impl<'a> Default for XXXXCluster<'a> {
+//     fn default() -> Self {
+//         let base = ClusterBase {
+//             id: CLUSTER_ID_AAAA,
+//             classification: ClusterClassification::Utility,
+//             revision: 1,
+//             features: (), // TODO
+//             attributes: &[Self::attribute_default(Attributes::MaxNetworks)],
+//             _phantom: core::marker::PhantomData::default(),
+//         };
 
-        Self { base }
-    }
-}
+//         Self { base }
+//     }
+// }
 
-impl Cluster for XXXXCluster {
+impl<'a> Cluster for XXXXCluster<'a> {
     fn base(&self) -> &ClusterBase {
         &self.base
     }
@@ -108,7 +109,7 @@ impl Cluster for XXXXCluster {
     }
 }
 
-impl XXXXCluster {
+impl<'a> XXXXCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::MaxNetworks => Attribute {

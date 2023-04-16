@@ -11,8 +11,8 @@ pub const CLUSTER_ID_NODE_OPERATIONAL_CRED: u16 = 0x003E;
 
 pub const CLUSTER_NOC_RESP_MAX: usize = 900;
 
-pub struct NodeOperationalCredCluster {
-    pub base: ClusterBase,
+pub struct NodeOperationalCredCluster<'a> {
+    pub base: ClusterBase<'a>,
 }
 
 #[repr(u16)]
@@ -64,23 +64,24 @@ pub enum NodeOperationalCredStatus {
     InvalidFabricIndex = 11,
 }
 
-// TODO(spec): make it conformant
-/// A default XXXX cluster that complies with mandatory requirements
-impl Default for NodeOperationalCredCluster {
-    fn default() -> Self {
-        let base = ClusterBase {
-            id: CLUSTER_ID_NODE_OPERATIONAL_CRED,
-            classification: ClusterClassification::Utility,
-            revision: 1,
-            features: (), // TODO
-            attributes: vec![Self::attribute_default(Attributes::Nocs)],
-        };
+// // TODO(spec): make it conformant
+// /// A default XXXX cluster that complies with mandatory requirements
+// impl<'a> Default for NodeOperationalCredCluster<'a> {
+//     fn default() -> Self {
+//         let base = ClusterBase {
+//             id: CLUSTER_ID_NODE_OPERATIONAL_CRED,
+//             classification: ClusterClassification::Utility,
+//             revision: 1,
+//             features: (), // TODO
+//             attributes: &'a [Self::attribute_default(Attributes::Nocs)],
+//             _phantom: core::marker::PhantomData::default(),
+//         };
 
-        Self { base }
-    }
-}
+//         Self { base }
+//     }
+// }
 
-impl Cluster for NodeOperationalCredCluster {
+impl<'a> Cluster for NodeOperationalCredCluster<'a> {
     fn base(&self) -> &ClusterBase {
         &self.base
     }
@@ -95,7 +96,7 @@ impl Cluster for NodeOperationalCredCluster {
     }
 }
 
-impl NodeOperationalCredCluster {
+impl<'a> NodeOperationalCredCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::Nocs => Attribute {

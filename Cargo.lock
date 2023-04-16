@@ -395,7 +395,7 @@ dependencies = [
 [[package]]
 name = "boxslab"
 version = "0.1.0"
-source = "git+https://github.com/project-chip/matter-rs#89c02e1c7e702f12eafcbcdf2956366f71a03913"
+source = "git+https://github.com/project-chip/matter-rs#3b091c210692fa26acd4a88bb5a3601cef8a25a0"
 dependencies = [
  "bitmaps",
 ]
@@ -1178,14 +1178,14 @@ dependencies = [
 
 [[package]]
 name = "is-terminal"
-version = "0.4.6"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "256017f749ab3117e93acb91063009e1f1bb56d03965b14c2c8df4eb02c524d8"
+checksum = "adcf93614601c8129ddf72e2d5633df827ba6551541c6d8c59520a371475be1f"
 dependencies = [
  "hermit-abi 0.3.1",
  "io-lifetimes",
  "rustix",
- "windows-sys 0.45.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1353,7 +1353,7 @@ dependencies = [
 [[package]]
 name = "matter-iot"
 version = "0.1.0"
-source = "git+https://github.com/project-chip/matter-rs#89c02e1c7e702f12eafcbcdf2956366f71a03913"
+source = "git+https://github.com/project-chip/matter-rs#3b091c210692fa26acd4a88bb5a3601cef8a25a0"
 dependencies = [
  "aes",
  "astro-dnssd",
@@ -1394,7 +1394,7 @@ dependencies = [
 [[package]]
 name = "matter_macro_derive"
 version = "0.1.0"
-source = "git+https://github.com/project-chip/matter-rs#89c02e1c7e702f12eafcbcdf2956366f71a03913"
+source = "git+https://github.com/project-chip/matter-rs#3b091c210692fa26acd4a88bb5a3601cef8a25a0"
 dependencies = [
  "proc-macro2",
  "quote",

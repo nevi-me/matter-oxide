@@ -9,8 +9,8 @@ use crate::cluster::{Cluster, ClusterBase};
 
 pub const CLUSTER_ID_ADMIN_COMMISSIONING: u16 = 0x003C;
 
-pub struct AdminCommissioningCluster {
-    pub base: ClusterBase,
+pub struct AdminCommissioningCluster<'a> {
+    pub base: ClusterBase<'a>,
 }
 
 #[repr(u16)]
@@ -43,23 +43,24 @@ pub enum AdminCommissioningStatus {
     WindowNotOpen = 4,
 }
 
-// TODO(spec): make it conformant
-/// A default XXXX cluster that complies with mandatory requirements
-impl Default for AdminCommissioningCluster {
-    fn default() -> Self {
-        let base = ClusterBase {
-            id: CLUSTER_ID_ADMIN_COMMISSIONING,
-            classification: ClusterClassification::Utility,
-            revision: 1,
-            features: (), // TODO
-            attributes: vec![],
-        };
+// // TODO(spec): make it conformant
+// /// A default XXXX cluster that complies with mandatory requirements
+// impl<'a> Default for AdminCommissioningCluster<'a> {
+//     fn default() -> Self {
+//         let base = ClusterBase {
+//             id: CLUSTER_ID_ADMIN_COMMISSIONING,
+//             classification: ClusterClassification::Utility,
+//             revision: 1,
+//             features: (), // TODO
+//             attributes: &[],
+//             _phantom: core::marker::PhantomData::default(),
+//         };
 
-        Self { base }
-    }
-}
+//         Self { base }
+//     }
+// }
 
-impl Cluster for AdminCommissioningCluster {
+impl<'a> Cluster for AdminCommissioningCluster<'a> {
     fn base(&self) -> &ClusterBase {
         &self.base
     }
@@ -74,7 +75,7 @@ impl Cluster for AdminCommissioningCluster {
     }
 }
 
-impl AdminCommissioningCluster {
+impl<'a> AdminCommissioningCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::WindowStatus => Attribute {

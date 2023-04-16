@@ -11,8 +11,8 @@ pub const CLUSTER_ID_LEVEL: u16 = 0x0008;
 pub const CLUSTER_ID_LEVEL_LIGHT: u16 = CLUSTER_ID_LEVEL;
 pub const CLUSTER_ID_LEVEL_PWM: u16 = 0x001C;
 
-pub struct LevelCluster {
-    pub base: ClusterBase,
+pub struct LevelCluster<'a> {
+    pub base: ClusterBase<'a>,
 }
 
 #[repr(u16)]
@@ -42,31 +42,32 @@ pub enum Commands {
     // ...
 }
 
-// TODO(spec): make it conformant
-/// A default level cluster that complies with mandatory requirements
-impl Default for LevelCluster {
-    fn default() -> Self {
-        let base = ClusterBase {
-            id: CLUSTER_ID_LEVEL,
-            classification: ClusterClassification::Application,
-            revision: 5,
-            features: (), // TODO
-            attributes: vec![
-                Self::attribute_default(Attributes::CurrentLevel),
-                Self::attribute_default(Attributes::RemainingTime),
-            ],
-        };
+// // TODO(spec): make it conformant
+// /// A default level cluster that complies with mandatory requirements
+// impl<'a> Default for LevelCluster<'a> {
+//     fn default() -> Self {
+//         let base = ClusterBase {
+//             id: CLUSTER_ID_LEVEL,
+//             classification: ClusterClassification::Application,
+//             revision: 5,
+//             features: (), // TODO
+//             attributes: &[
+//                 Self::attribute_default(Attributes::CurrentLevel),
+//                 Self::attribute_default(Attributes::RemainingTime),
+//             ],
+//             _phantom: core::marker::PhantomData::default(),
+//         };
 
-        Self { base }
-    }
-}
+//         Self { base }
+//     }
+// }
 
-impl Cluster for LevelCluster {
+impl<'a> Cluster<'a> for LevelCluster<'a> {
     fn base(&self) -> &ClusterBase {
         &self.base
     }
 
-    fn base_mut(&mut self) -> &mut ClusterBase {
+    fn base_mut(&mut self) -> &mut ClusterBase<'a> {
         &mut self.base
     }
 
@@ -76,7 +77,7 @@ impl Cluster for LevelCluster {
     }
 }
 
-impl LevelCluster {
+impl<'a> LevelCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::CurrentLevel => Attribute {

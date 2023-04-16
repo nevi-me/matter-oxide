@@ -1,3 +1,9 @@
+#![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
+// #![cfg_attr(no_std, allow(unused))]
+#![allow(unused)]
+#![allow(clippy::all)]
+#![allow(dead_code)]
+
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -6,10 +12,6 @@ use std::{
 
 use bytes::BytesMut;
 use exchange::ExchangeManager;
-use matter::{
-    crypto::{CryptoKeyPair, KeyPair},
-    fabric::Fabric,
-};
 use message::{Message, SessionType};
 use secure_channel::pake::{PAKEInteraction, Pake2};
 use tokio::{
@@ -50,7 +52,7 @@ pub type TlvAnyData = heapless::Vec<u8, 1024>;
 
 // TODO: rename to something more appropriate
 pub struct MatterController {
-    fabric: Fabric,
+    fabric: (),
     nodes: Vec<()>,
     last_node_id: i64,
     pake_session_ids: HashSet<u16>,
@@ -82,7 +84,7 @@ impl MatterController {
         let local_address = "[::]:0".parse().unwrap();
         let udp = UdpInterface::new(local_address).await;
         let controller = Self {
-            fabric: Fabric::dummy().unwrap(),
+            fabric: (),
             nodes: vec![],
             last_node_id: 0,
             pake_session_ids: HashSet::with_capacity(32),
@@ -93,7 +95,7 @@ impl MatterController {
         };
         // TODO: this compiles, we should return the handle
         controller.start(receiver).await;
-        println!("Controller started");
+        // println!("Controller started");
         controller
     }
 
@@ -109,10 +111,10 @@ impl MatterController {
                 let mut buf = BytesMut::with_capacity(1024);
                 message.encode(&mut buf, None);
                 let buf = buf.to_vec();
-                println!("Sending message to {recipient}");
+                // println!("Sending message to {recipient}");
                 udp.send_to(&buf, recipient).await;
             }
-            println!("Receiver stopped receiving messages")
+            // println!("Receiver stopped receiving messages")
         });
 
         // Spawn a task to receive messages and process them
@@ -122,7 +124,7 @@ impl MatterController {
                 let mut buf = [0u8; 1024];
                 let (len, peer) = recv_socket.recv_from(&mut buf).await.unwrap();
                 // Decode the message but not decrypt it
-                println!("Received from {peer} {}", hex::encode(&buf[..len]));
+                // println!("Received from {peer} {}", hex::encode(&buf[..len]));
                 let mut message = Message::decode(&buf[..len]);
                 // TODO don't decrypt here, using it to test
                 message.decrypt(None);
@@ -146,7 +148,7 @@ impl MatterController {
         discriminator: u8,
         pin: u32,
     ) {
-        println!("Commission with PIN");
+        // println!("Commission with PIN");
         /*
         How do we send and receive simultaneously? We want MRP built in, so for each stage of commissioning,
         we would want to be able to retry sending until we get an ack. Then after processing, move to the
@@ -228,6 +230,9 @@ impl MatterController {
             SecureSessionContext::new_pase(true, false, session_id, peer_session_id, k_e, &[]);
         drop(pake_interaction);
 
+        // Send standalone ack for now, then work on the interaction client
+        // ack();
+
         /*
         How do we know when we've received a message that's moved the processing forward?
         Whatever can be mutated by the exchange should probably be owned by it, right?
@@ -266,44 +271,44 @@ impl MatterController {
         }
     }
 
-    fn get_or_generate_keypair() -> Result<KeyPair, ()> {
-        let path = "fabric_keypair.json";
-        let exists = std::fs::metadata(path).is_ok();
-        if exists {
-            let keypair_file = std::fs::File::open(path).unwrap();
-            let data: KeyPairStorage = serde_json::from_reader(keypair_file).unwrap();
-            let keypair = KeyPair::new_from_components(&data.public, &data.private).unwrap();
-            Ok(keypair)
-        } else {
-            let keypair = KeyPair::new().map_err(|e| {
-                eprintln!("Unable to generate keypair: {e:?}");
-            })?;
-            // Persist it
-            let mut private_key = [0u8; 64];
-            let mut public_key = [0u8; 32];
-            let keypair_file = std::fs::File::create(path).unwrap();
-            let len = keypair.get_private_key(&mut private_key).unwrap();
-            assert_eq!(len, private_key.len());
-            let len = keypair.get_public_key(&mut public_key).unwrap();
-            assert_eq!(len, public_key.len());
-            serde_json::to_writer(
-                keypair_file,
-                &KeyPairStorage {
-                    private: private_key.to_vec(),
-                    public: public_key.to_vec(),
-                },
-            )
-            .unwrap();
-            Ok(keypair)
-        }
-    }
+    // fn get_or_generate_keypair() -> Result<KeyPair, ()> {
+    //     let path = "fabric_keypair.json";
+    //     let exists = std::fs::metadata(path).is_ok();
+    //     if exists {
+    //         let keypair_file = std::fs::File::open(path).unwrap();
+    //         let data: KeyPairStorage = serde_json::from_reader(keypair_file).unwrap();
+    //         let keypair = KeyPair::new_from_components(&data.public, &data.private).unwrap();
+    //         Ok(keypair)
+    //     } else {
+    //         let keypair = KeyPair::new().map_err(|e| {
+    //             e// println!("Unable to generate keypair: {e:?}");
+    //         })?;
+    //         // Persist it
+    //         let mut private_key = [0u8; 64];
+    //         let mut public_key = [0u8; 32];
+    //         let keypair_file = std::fs::File::create(path).unwrap();
+    //         let len = keypair.get_private_key(&mut private_key).unwrap();
+    //         assert_eq!(len, private_key.len());
+    //         let len = keypair.get_public_key(&mut public_key).unwrap();
+    //         assert_eq!(len, public_key.len());
+    //         serde_json::to_writer(
+    //             keypair_file,
+    //             &KeyPairStorage {
+    //                 private: private_key.to_vec(),
+    //                 public: public_key.to_vec(),
+    //             },
+    //         )
+    //         .unwrap();
+    //         Ok(keypair)
+    //     }
+    // }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-struct KeyPairStorage {
-    private: Vec<u8>,
-    public: Vec<u8>,
-}
+// #[derive(serde::Serialize, serde::Deserialize)]
+// struct KeyPairStorage {
+//     private: Vec<u8>,
+//     public: Vec<u8>,
+// }
 
 #[cfg(test)]
 mod tests {
@@ -313,7 +318,7 @@ mod tests {
     #[ignore = "used for manual testing only"]
     async fn test_commissioning() {
         let mut controller = MatterController::new().await;
-        let remote_address = "[::ffff:192.168.101.176]:5540".parse().unwrap();
+        let remote_address = "[::ffff:192.168.101.172]:5540".parse().unwrap();
         controller
             .commission_with_pin(remote_address, 250, 123456)
             .await;
