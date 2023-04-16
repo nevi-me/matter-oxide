@@ -21,7 +21,7 @@ use tokio::{
     },
     task::JoinHandle,
 };
-use transport::udp::UdpInterface;
+use transport::udp::{SocketAddress, UdpInterface};
 
 use crate::{
     crypto::fill_random,
@@ -57,7 +57,7 @@ pub struct MatterController {
     last_node_id: i64,
     pake_session_ids: HashSet<u16>,
     exchange_manager: ExchangeManager,
-    message_sender: Sender<(Message, SocketAddr)>,
+    message_sender: Sender<(Message, SocketAddress)>,
     udp: UdpInterface,
     message_store: Arc<RwLock<HashMap<(u16, SessionType), Message>>>,
 }
@@ -80,8 +80,9 @@ impl MatterController {
         to the exchange, and then polls at its level, sending messages appropriately?
         That isolates running the loop in one place, here.
          */
-        let (sender, receiver) = tokio::sync::mpsc::channel::<(Message, SocketAddr)>(32);
-        let local_address = "[::]:0".parse().unwrap();
+        let (sender, receiver) = tokio::sync::mpsc::channel::<(Message, SocketAddress)>(32);
+        let local_address: std::net::SocketAddr = "[::]:0".parse().unwrap();
+        let local_address = SocketAddress::from_std(&local_address);
         let udp = UdpInterface::new(local_address).await;
         let controller = Self {
             fabric: (),
@@ -99,7 +100,7 @@ impl MatterController {
         controller
     }
 
-    pub async fn start(&self, receiver: Receiver<(Message, SocketAddr)>) -> JoinHandle<()> {
+    pub async fn start(&self, receiver: Receiver<(Message, SocketAddress)>) -> JoinHandle<()> {
         let recv_socket = self.udp.socket();
         let message_store = self.message_store.clone();
 
@@ -144,7 +145,7 @@ impl MatterController {
     /// the remote node until the process is completed or fails
     pub async fn commission_with_pin(
         &mut self,
-        remote_address: SocketAddr,
+        remote_address: SocketAddress,
         discriminator: u8,
         pin: u32,
     ) {
@@ -181,7 +182,7 @@ impl MatterController {
             pake_interaction.pbkdf_param_request(exchange.unsecured_session_context_mut())
         };
         self.message_sender
-            .send((request_message, remote_address))
+            .send((request_message, remote_address.clone()))
             .await
             .unwrap();
         let response_message = self.wait_for_message(0, session_type).await;
@@ -197,7 +198,7 @@ impl MatterController {
         // Acknowledge previous response
         pake1_message.with_ack(next_ack);
         self.message_sender
-            .send((pake1_message, remote_address))
+            .send((pake1_message, remote_address.clone()))
             .await
             .unwrap();
         let mut pake2_message = self.wait_for_message(0, session_type).await;
@@ -207,7 +208,7 @@ impl MatterController {
         let mut pake3_message = pake_interaction.pake3(&pake2);
         pake3_message.with_ack(next_ack);
         self.message_sender
-            .send((pake3_message, remote_address))
+            .send((pake3_message, remote_address.clone()))
             .await
             .unwrap();
         let pake_finished_message = self.wait_for_message(0, session_type).await;
@@ -318,9 +319,11 @@ mod tests {
     #[ignore = "used for manual testing only"]
     async fn test_commissioning() {
         let mut controller = MatterController::new().await;
-        let remote_address = "[::ffff:192.168.101.172]:5540".parse().unwrap();
+        let remote_address = "[::ffff:192.168.101.172]:5540"
+            .parse::<std::net::SocketAddr>()
+            .unwrap();
         controller
-            .commission_with_pin(remote_address, 250, 123456)
+            .commission_with_pin(SocketAddress::from_std(&remote_address), 250, 123456)
             .await;
     }
 }
