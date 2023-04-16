@@ -19,7 +19,7 @@ impl CaseInteraction {
         Message {
             message_header: MessageHeader::default(),
             payload_header: None,
-            payload: vec![],
+            payload: heapless::Vec::new(),
             integrity_check: None,
         }
     }
@@ -30,7 +30,7 @@ impl CaseInteraction {
         Message {
             message_header: MessageHeader::default(),
             payload_header: None,
-            payload: vec![],
+            payload: heapless::Vec::new(),
             integrity_check: None,
         }
     }
@@ -43,7 +43,7 @@ impl CaseInteraction {
         Message {
             message_header: MessageHeader::default(),
             payload_header: None,
-            payload: vec![],
+            payload: heapless::Vec::new(),
             integrity_check: None,
         }
     }
@@ -51,7 +51,7 @@ impl CaseInteraction {
         Message {
             message_header: MessageHeader::default(),
             payload_header: None,
-            payload: vec![],
+            payload: heapless::Vec::new(),
             integrity_check: None,
         }
     }
@@ -59,7 +59,7 @@ impl CaseInteraction {
         Message {
             message_header: MessageHeader::default(),
             payload_header: None,
-            payload: vec![],
+            payload: heapless::Vec::new(),
             integrity_check: None,
         }
     }
@@ -67,7 +67,7 @@ impl CaseInteraction {
         Message {
             message_header: MessageHeader::default(),
             payload_header: None,
-            payload: vec![],
+            payload: heapless::Vec::new(),
             integrity_check: None,
         }
     }

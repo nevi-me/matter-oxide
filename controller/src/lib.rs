@@ -190,7 +190,9 @@ impl MatterController {
         let next_ack = response_message.next_ack();
 
         let peer_session_id = response_message.message_header.session_id;
-        pake_interaction.set_pbkdf_param_response(response_message.payload.clone());
+        pake_interaction.set_pbkdf_param_response(
+            heapless::Vec::from_slice(response_message.payload.as_slice()).unwrap(),
+        );
         let mut pake1_message = {
             let exchange = self.exchange_manager.find_exchange(exchange_id);
             pake_interaction.pake1(exchange.unsecured_session_context_mut())

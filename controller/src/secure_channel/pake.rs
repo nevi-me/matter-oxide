@@ -24,8 +24,8 @@ in the session context? What else gets stored in the unsecured session context?
 pub struct PAKEInteraction {
     spake2p: Option<Spake2P>,
     passcode: u32,
-    pbkdf_param_request: Vec<u8>,
-    pbkdf_param_response: Vec<u8>,
+    pbkdf_param_request: heapless::Vec<u8, 512>,
+    pbkdf_param_response: heapless::Vec<u8, 512>,
     /// Respondent can set these at the beginning if known or when generated.
     pbkdf_params: Option<PBKDFParams>,
     // This is also stored in the unsecured session context
@@ -55,8 +55,8 @@ impl PAKEInteraction {
             responder_session_id: 0,
             exchange_id,
             message_counter,
-            pbkdf_param_request: vec![],
-            pbkdf_param_response: vec![],
+            pbkdf_param_request: Default::default(),
+            pbkdf_param_response: Default::default(),
             pbkdf_params: None,
             c_a: Default::default(),
             c_b: Default::default(),
@@ -78,8 +78,8 @@ impl PAKEInteraction {
             exchange_id,
             message_counter,
             responder_session_id: session_id,
-            pbkdf_param_request: vec![],
-            pbkdf_param_response: vec![],
+            pbkdf_param_request: heapless::Vec::new(),
+            pbkdf_param_response: heapless::Vec::new(),
             pbkdf_params,
             c_a: Default::default(),
             c_b: Default::default(),
@@ -121,11 +121,11 @@ impl PAKEInteraction {
         };
         // Encode the request struct
         let encoded = pbkdf_param_request.to_tlv();
-        self.pbkdf_param_request = encoded.to_slice().to_vec();
+        self.pbkdf_param_request = heapless::Vec::from_slice(encoded.to_slice()).unwrap();
         Message {
             message_header: self.message_header(),
             payload_header: Some(payload_header),
-            payload: encoded.to_slice().to_vec(),
+            payload: encoded.inner(),
             integrity_check: None,
         }
     }
@@ -160,7 +160,7 @@ impl PAKEInteraction {
             pbkdf_params_response.pbkdf_params = self.pbkdf_params.clone();
         }
         let encoded = pbkdf_params_response.to_tlv();
-        self.pbkdf_param_response = encoded.to_slice().to_vec();
+        self.pbkdf_param_response = heapless::Vec::from_slice(encoded.to_slice()).unwrap();
 
         // DRY: Payload header
         let mut payload_header = ProtocolHeader::default();
@@ -177,7 +177,7 @@ impl PAKEInteraction {
         Message {
             message_header: self.message_header(),
             payload_header: Some(payload_header),
-            payload: encoded.to_slice().to_vec(),
+            payload: encoded.inner(),
             integrity_check: None,
         }
     }
@@ -216,7 +216,7 @@ impl PAKEInteraction {
         Message {
             message_header: self.message_header(),
             payload_header: Some(payload_header),
-            payload: encoded.to_slice().to_vec(),
+            payload: encoded.inner(),
             integrity_check: None,
         }
     }
@@ -254,7 +254,7 @@ impl PAKEInteraction {
         Message {
             message_header: self.message_header(),
             payload_header: None, // TODO
-            payload: encoded.to_slice().to_vec(),
+            payload: encoded.inner(),
             integrity_check: None,
         }
     }
@@ -301,7 +301,7 @@ impl PAKEInteraction {
         Message {
             message_header: self.message_header(),
             payload_header: Some(payload_header),
-            payload: encoded.to_slice().to_vec(),
+            payload: encoded.inner(),
             integrity_check: None,
         }
     }
@@ -316,12 +316,12 @@ impl PAKEInteraction {
             // TODO: is header different?
             message_header: self.message_header(),
             payload_header: None,
-            payload: vec![],
+            payload: Default::default(),
             integrity_check: None,
         }
     }
 
-    pub fn set_pbkdf_param_response(&mut self, value: Vec<u8>) {
+    pub fn set_pbkdf_param_response(&mut self, value: heapless::Vec<u8, 512>) {
         self.pbkdf_param_response = value;
     }
     pub fn get_secrets(&self) -> (&[u8; 16], &[u8; 32], &[u8; 32]) {

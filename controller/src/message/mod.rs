@@ -2,7 +2,7 @@ use bitflags::bitflags;
 // TODO: ideal to use a version of buf that doesn't panic
 use bytes::{Buf, BufMut, BytesMut};
 
-use crate::crypto::encrypt_in_place;
+use crate::{crypto::encrypt_in_place, session_context::SecureChannelProtocolID};
 
 pub mod status_report;
 
@@ -45,11 +45,37 @@ enum X {}
 pub struct Message {
     pub message_header: MessageHeader,
     pub payload_header: Option<ProtocolHeader>,
-    pub payload: Vec<u8>,
-    pub integrity_check: Option<Vec<u8>>,
+    pub payload: heapless::Vec<u8, 1024>,
+    pub integrity_check: Option<heapless::Vec<u8, 16>>,
 }
 
 impl Message {
+    /// Create a message for a standalone acknowledgement (4.11.7.1)
+    pub fn standalone_ack(ack: u32) -> Self {
+        Self {
+            message_header: MessageHeader {
+                session_type: todo!(),
+                message_flags: todo!(),
+                session_id: todo!(),
+                security_flags: todo!(),
+                message_counter: todo!(),
+                source_node_id: todo!(),
+                dest_node_id: todo!(),
+                message_extensions: (),
+            },
+            payload_header: Some(ProtocolHeader {
+                exchange_flags: ExchangeFlags::ACKNOWLDEGE,
+                protocol_opcode: SecureChannelProtocolID::MRPStandaloneAck as _,
+                exchange_id: todo!(),
+                protocol_id: ProtocolID::SecureChannel as _,
+                protocol_vendor_id: todo!(),
+                ack_message_counter: Some(ack),
+                secured_extensions: (),
+            }),
+            payload: Default::default(),
+            integrity_check: None,
+        }
+    }
     pub fn decode(mut buf: &[u8]) -> Self {
         // Perform validity checks
         let message_flags = MessageFlags::from_bits(buf.get_u8()).unwrap();
@@ -113,7 +139,7 @@ impl Message {
                 message_extensions: (),
             },
             payload_header: None,
-            payload: buf.to_vec(),
+            payload: heapless::Vec::from_slice(&buf).unwrap(),
             integrity_check: None,
         }
     }
@@ -152,7 +178,7 @@ impl Message {
             secured_extensions: (),
         });
 
-        self.payload = buf.to_vec();
+        self.payload = heapless::Vec::from_slice(&buf).unwrap();
     }
 
     pub fn encode(&self, out: &mut BytesMut, encryption_key: Option<&[u8]>) {

@@ -598,6 +598,10 @@ impl Encoder {
     pub fn to_vec<const N: usize>(&self) -> heapless::Vec<u8, N> {
         heapless::Vec::from_slice(self.to_slice()).unwrap()
     }
+
+    pub fn inner(self) -> heapless::Vec<u8, 1024> {
+        self.data
+    }
 }
 
 #[cfg(test)]
@@ -621,12 +625,6 @@ mod test {
         let mut next = decoded;
         loop {
             let ind = format!("{:indent$}", "", indent = indent * 4);
-            println!("{}{:?}", ind, next.get_type());
-            println!("{}{:?}", ind, next.get_control());
-            println!("{}{:?}", ind, next.get_value());
-            println!("{}{:?}", ind, next.is_container());
-            println!("{}{:?}", ind, next.is_last());
-            println!();
 
             if next.is_container() {
                 indent += 1;
@@ -715,7 +713,6 @@ mod test {
             TagLengthValue::Container,
         );
 
-        println!("{:02x?}", encoder.to_slice());
         assert_eq!(&wanted, encoder.to_slice());
     }
 }
