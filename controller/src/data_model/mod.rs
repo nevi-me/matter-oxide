@@ -1,5 +1,10 @@
 //! Defines core types in the data model
 
+pub mod device;
+pub mod device_type;
+pub mod endpoint;
+pub mod handler;
+
 /// Data Model Specification (7.1)
 pub const DATA_MODEL_REVISION: u8 = 16;
 
@@ -25,7 +30,6 @@ pub struct Event<T> {
 
 pub struct Attribute {
     pub id: u16,
-    pub value: AttributeValue,
     pub quality: (),
     pub access: (),
 }

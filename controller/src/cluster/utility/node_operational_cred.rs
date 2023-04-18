@@ -5,14 +5,14 @@ use crate::{
     data_model::{Attribute, AttributeValue},
 };
 
-use crate::cluster::{Cluster, ClusterBase};
+use crate::cluster::Cluster;
 
 pub const CLUSTER_ID_NODE_OPERATIONAL_CRED: u16 = 0x003E;
 
 pub const CLUSTER_NOC_RESP_MAX: usize = 900;
 
 pub struct NodeOperationalCredCluster<'a> {
-    pub base: ClusterBase<'a>,
+    data_version: &'a u32,
 }
 
 #[repr(u16)]
@@ -64,44 +64,11 @@ pub enum NodeOperationalCredStatus {
     InvalidFabricIndex = 11,
 }
 
-// // TODO(spec): make it conformant
-// /// A default XXXX cluster that complies with mandatory requirements
-// impl<'a> Default for NodeOperationalCredCluster<'a> {
-//     fn default() -> Self {
-//         let base = ClusterBase {
-//             id: CLUSTER_ID_NODE_OPERATIONAL_CRED,
-//             classification: ClusterClassification::Utility,
-//             revision: 1,
-//             features: (), // TODO
-//             attributes: &'a [Self::attribute_default(Attributes::Nocs)],
-//             _phantom: core::marker::PhantomData::default(),
-//         };
-
-//         Self { base }
-//     }
-// }
-
-impl<'a> Cluster for NodeOperationalCredCluster<'a> {
-    fn base(&self) -> &ClusterBase {
-        &self.base
-    }
-
-    fn base_mut(&mut self) -> &mut ClusterBase {
-        &mut self.base
-    }
-
-    fn try_attribute_default(attribute_value: u16) -> Option<Attribute> {
-        let attribute = Attributes::from_u16(attribute_value).unwrap();
-        Some(Self::attribute_default(attribute))
-    }
-}
-
 impl<'a> NodeOperationalCredCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::Nocs => Attribute {
                 id: attribute as _,
-                value: AttributeValue::U8(0), // TODO: should be nullable
                 quality: (),
                 access: (),
             },

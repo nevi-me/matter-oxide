@@ -21,7 +21,7 @@ pub const CRYPTO_W_SIZE_BITS: usize = CRYPTO_W_SIZE_BYTES * 8;
 We want to store details about the session context here, or should we store this
 in the session context? What else gets stored in the unsecured session context?
 */
-pub struct PAKEInteraction {
+pub struct PASEManager {
     spake2p: Option<Spake2P>,
     passcode: u32,
     pbkdf_param_request: heapless::Vec<u8, 512>,
@@ -41,7 +41,7 @@ pub struct PAKEInteraction {
     k_e: [u8; 16],
 }
 
-impl PAKEInteraction {
+impl PASEManager {
     pub fn initiator(
         passcode: u32,
         session_id: u16,

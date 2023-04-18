@@ -143,6 +143,9 @@ impl Message {
             integrity_check: None,
         }
     }
+    pub fn encrypt(&mut self, encryption_key: &[u8]) {
+        todo!("Message encryption not yet supported")
+    }
     pub fn decrypt(&mut self, decryption_key: Option<&[u8]>) {
         // Protocol Header Field Descriptions (4.4.3)
         let mut buf = BytesMut::from(&self.payload[..]);
@@ -280,6 +283,8 @@ impl ProtocolHeader {
     }
 }
 
+// TODO: this clashes with SecureSessionType in that it makes for an awkward
+// interface. We don't know if a secure unicast session is PASE or CASE
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SessionType {
     UnsecuredSession,

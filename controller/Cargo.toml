@@ -6,20 +6,27 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+default = ["controller"]
+# default = []
 std = [
     "serde_json/std",
     "hex/std",
     "rand/std",
     "x509-cert/std"
 ]
-default = ["std"]
-# default = []
+# For devices that will control and administer others on the fabric.
+# It can be possible for a controller to also act as an end-device.
+controller = ["std-tokio"]
+# Devices that expose their core functionality and don't control others.
+end_device = []
+# Suitable for end devices and bridges that don't need to be controllers.
+std-smol = ["std", "smol"]
+# Used by controllers and devices that don't have resource constraints.
+std-tokio = ["std", "tokio"]
 
 [dependencies]
-matter = { git = "https://github.com/project-chip/matter-rs", package= "matter-iot", default-features = false, features = ["crypto_rustcrypto"] }
 libmdns = "0.7"
 mdns = "3"
-
 
 ## requires std
 serde_json = { version = "1", default-features = false, optional = true }
@@ -53,7 +60,8 @@ once_cell = { version = "1", default-features = false, features = [] }
 
 ## async
 futures-util = { version = "0.3", default-features = false, features = ["async-await"] }
-tokio = { version = "1", features = ["full"] } # TODO constrain features
+tokio = { version = "1", features = ["full"], optional = true } # TODO constrain features
+smol = { version = "1", optional = true }
 
 [dev-dependencies]
 hex-literal = "0.4"

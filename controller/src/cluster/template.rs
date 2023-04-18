@@ -52,7 +52,7 @@ impl Cluster for XXXXCluster {
         &mut self.base
     }
 
-    fn try_attribute_default(attribute_value: u16) -> Option<Attribute> {
+    fn try_attribute_default(&self, attribute_value: u16) -> Option<Attribute> {
         let attribute = Attributes::from_u16(attribute_value).unwrap();
         Some(Self::attribute_default(attribute))
     }

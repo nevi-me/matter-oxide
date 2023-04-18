@@ -2,8 +2,12 @@ use std::collections::HashMap;
 
 use tokio::sync::mpsc::Receiver;
 
-use crate::session_context::{
-    SecureSessionContext, SecureSessionType, SessionContext, SessionRole, UnsecuredSessionContext,
+use crate::{
+    message::Message,
+    session_context::{
+        SecureSessionContext, SecureSessionType, SessionContext, SessionRole,
+        UnsecuredSessionContext,
+    },
 };
 
 pub struct ExchangeManager {
@@ -83,7 +87,16 @@ impl ExchangeManager {
     }
 
     // TODO: where do encryption and decryption take place?
-    pub fn process_message(&mut self) {}
+    pub fn process_message(&mut self, message: Message) {
+        // Exchange Message Matching (4.9.5.1)
+        /*
+        Attempt to match the messge to an existing message
+        Use the exchange ID of the message
+        Initiator matches opposite of the exchange
+            Else it's an unsolicited message, handle as such
+
+        */
+    }
 }
 
 impl Exchange {

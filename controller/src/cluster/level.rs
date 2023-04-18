@@ -5,14 +5,12 @@ use crate::{
     data_model::{Attribute, AttributeValue},
 };
 
-use super::{Cluster, ClusterBase};
-
 pub const CLUSTER_ID_LEVEL: u16 = 0x0008;
 pub const CLUSTER_ID_LEVEL_LIGHT: u16 = CLUSTER_ID_LEVEL;
 pub const CLUSTER_ID_LEVEL_PWM: u16 = 0x001C;
 
 pub struct LevelCluster<'a> {
-    pub base: ClusterBase<'a>,
+    data_version: &'a u32,
 }
 
 #[repr(u16)]
@@ -42,71 +40,31 @@ pub enum Commands {
     // ...
 }
 
-// // TODO(spec): make it conformant
-// /// A default level cluster that complies with mandatory requirements
-// impl<'a> Default for LevelCluster<'a> {
-//     fn default() -> Self {
-//         let base = ClusterBase {
-//             id: CLUSTER_ID_LEVEL,
-//             classification: ClusterClassification::Application,
-//             revision: 5,
-//             features: (), // TODO
-//             attributes: &[
-//                 Self::attribute_default(Attributes::CurrentLevel),
-//                 Self::attribute_default(Attributes::RemainingTime),
-//             ],
-//             _phantom: core::marker::PhantomData::default(),
-//         };
-
-//         Self { base }
-//     }
-// }
-
-impl<'a> Cluster<'a> for LevelCluster<'a> {
-    fn base(&self) -> &ClusterBase {
-        &self.base
-    }
-
-    fn base_mut(&mut self) -> &mut ClusterBase<'a> {
-        &mut self.base
-    }
-
-    fn try_attribute_default(attribute_value: u16) -> Option<Attribute> {
-        let attribute = Attributes::from_u16(attribute_value).unwrap();
-        Some(Self::attribute_default(attribute))
-    }
-}
-
 impl<'a> LevelCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::CurrentLevel => Attribute {
                 id: attribute as _,
-                value: AttributeValue::U8(0), // TODO: should be nullable
                 quality: (),
                 access: (),
             },
             Attributes::RemainingTime => Attribute {
                 id: attribute as _,
-                value: AttributeValue::U16(0),
                 quality: (),
                 access: (),
             },
             Attributes::MinLevel => Attribute {
                 id: attribute as _,
-                value: AttributeValue::U8(1),
                 quality: (),
                 access: (),
             },
             Attributes::MaxLevel => Attribute {
                 id: attribute as _,
-                value: AttributeValue::U8(254),
                 quality: (),
                 access: (),
             },
             Attributes::CurrentFrequency => Attribute {
                 id: attribute as _,
-                value: AttributeValue::U16(0),
                 quality: (),
                 access: (),
             },

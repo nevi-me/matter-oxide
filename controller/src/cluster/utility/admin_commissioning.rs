@@ -1,16 +1,115 @@
 use num::FromPrimitive;
 
 use crate::{
-    cluster::ClusterClassification,
-    data_model::{Attribute, AttributeValue},
+    cluster::{Cluster, ClusterClassification},
+    data_model::{
+        handler::{AttrDetails, CmdDetails, Handler},
+        Attribute, AttributeValue,
+    },
+    secure_channel::pake::PASEManager,
+    session_context::SecureSessionContext,
+    tlv::Encoder,
 };
 
-use crate::cluster::{Cluster, ClusterBase};
+pub const CLUSTER_ID: u16 = 0x003C;
 
-pub const CLUSTER_ID_ADMIN_COMMISSIONING: u16 = 0x003C;
+pub const CLUSTER: Cluster<'static> = Cluster {
+    id: CLUSTER_ID,
+    classification: ClusterClassification::Utility,
+    revision: 0,
+    features: 0,
+    attributes: &[
+        Attribute {
+            id: Attributes::WindowStatus as _,
+            quality: (),
+            access: (),
+        },
+        Attribute {
+            id: Attributes::AdminFabricIndex as _,
+            quality: (),
+            access: (),
+        },
+        Attribute {
+            id: Attributes::AdminVendorId as _,
+            quality: (),
+            access: (),
+        },
+    ],
+};
 
-pub struct AdminCommissioningCluster<'a> {
-    pub base: ClusterBase<'a>,
+pub struct AdminCommissioningCluster {
+    cluster_revision: u32,
+    pase_manager: Option<PASEManager>,
+}
+
+impl AdminCommissioningCluster {
+    pub fn new() -> Self {
+        Self {
+            cluster_revision: 1,
+            pase_manager: None,
+        }
+    }
+
+    pub fn read(&self, attr: AttrDetails, encoder: &mut Encoder) {
+        todo!()
+    }
+
+    pub fn invoke(
+        &mut self,
+        session: &mut SecureSessionContext,
+        cmd: &CmdDetails,
+        data: &[u8],
+        encoder: &mut Encoder,
+    ) {
+        todo!()
+    }
+
+    fn cmd_open_commissioning_window(
+        &mut self,
+        session: &mut SecureSessionContext,
+        data: &[u8],
+        encoder: &mut Encoder,
+    ) {
+        todo!()
+    }
+
+    fn cmd_open_basic_commissioning_window(
+        &mut self,
+        session: &mut SecureSessionContext,
+        data: &[u8],
+        encoder: &mut Encoder,
+    ) {
+        todo!()
+    }
+
+    fn cmd_revoke_commissioning(
+        &mut self,
+        session: &mut SecureSessionContext,
+        data: &[u8],
+        encoder: &mut Encoder,
+    ) {
+        todo!()
+    }
+}
+
+impl Handler for AdminCommissioningCluster {
+    fn read(&self, attr: &AttrDetails, encoder: crate::data_model::handler::AttrDataEncoder) {
+        todo!()
+    }
+
+    fn write(&mut self, _attr: &AttrDetails, _data: &crate::data_model::handler::TLVElement) {
+        panic!("Attribute not found")
+    }
+
+    fn invoke(
+        &mut self,
+        _transaction: &mut crate::data_model::handler::Transaction,
+        _cmd: &CmdDetails,
+        _data: &crate::data_model::handler::TLVElement,
+        _encoder: crate::data_model::handler::CmdDataEncoder,
+    ) {
+        panic!("Command not found")
+    }
 }
 
 #[repr(u16)]
@@ -41,50 +140,4 @@ pub enum AdminCommissioningStatus {
     Busy = 2,
     PAKEParameterError = 3,
     WindowNotOpen = 4,
-}
-
-// // TODO(spec): make it conformant
-// /// A default XXXX cluster that complies with mandatory requirements
-// impl<'a> Default for AdminCommissioningCluster<'a> {
-//     fn default() -> Self {
-//         let base = ClusterBase {
-//             id: CLUSTER_ID_ADMIN_COMMISSIONING,
-//             classification: ClusterClassification::Utility,
-//             revision: 1,
-//             features: (), // TODO
-//             attributes: &[],
-//             _phantom: core::marker::PhantomData::default(),
-//         };
-
-//         Self { base }
-//     }
-// }
-
-impl<'a> Cluster for AdminCommissioningCluster<'a> {
-    fn base(&self) -> &ClusterBase {
-        &self.base
-    }
-
-    fn base_mut(&mut self) -> &mut ClusterBase {
-        &mut self.base
-    }
-
-    fn try_attribute_default(attribute_value: u16) -> Option<Attribute> {
-        let attribute = Attributes::from_u16(attribute_value).unwrap();
-        Some(Self::attribute_default(attribute))
-    }
-}
-
-impl<'a> AdminCommissioningCluster<'a> {
-    pub const fn attribute_default(attribute: Attributes) -> Attribute {
-        match attribute {
-            Attributes::WindowStatus => Attribute {
-                id: attribute as _,
-                value: AttributeValue::U8(0), // TODO: should be nullable
-                quality: (),
-                access: (),
-            },
-            _ => todo!(),
-        }
-    }
 }

@@ -1,3 +1,7 @@
+#![allow(unused)]
+#![allow(clippy::all)]
+#![allow(dead_code)]
+
 use std::net::SocketAddr;
 
 use axum::{
@@ -38,7 +42,7 @@ async fn main() {
         ;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 5580));
-    println!("Matter WS Server listening on {addr}");
+    // println!("Matter WS Server listening on {addr}");
     let server =
         axum::Server::bind(&addr).serve(app.into_make_service_with_connect_info::<SocketAddr>());
 
@@ -46,7 +50,7 @@ async fn main() {
 }
 
 async fn default_hander() -> impl IntoResponse {
-    println!("default handler called");
+    // println!("default handler called");
     Json(())
 }
 
@@ -61,7 +65,7 @@ async fn ws_handler(
     } else {
         String::from("Unknown browser")
     };
-    println!("`{user_agent}` at {addr} connected.");
+    // println!("`{user_agent}` at {addr} connected.");
     // Get a fresh subscription to the message broadcast
     // let ws_receiver = context.ws_broadcast.subscribe();
     // let db = context.db;
@@ -93,13 +97,13 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
 
         loop {
             if violations > 32 {
-                println!("Too many websocket violations, disconnecting");
+                // println!("Too many websocket violations, disconnecting");
                 break;
             }
             let msg = receiver.next().await;
             match msg {
                 Some(Ok(Message::Text(text))) => {
-                    println!("Received text message {text:?} from client {who:?}");
+                    // println!("Received text message {text:?} from client {who:?}");
 
                     let Ok(message) = serde_json::from_str::<WsMessage>(&text) else {
                         violations += 1;
@@ -149,23 +153,23 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
                     }
                 }
                 Some(Ok(Message::Binary(_))) => {
-                    println!("Binary message not supported");
+                    // println!("Binary message not supported");
                     violations += 1;
                 }
                 Some(Ok(Message::Ping(_) | Message::Pong(_))) => {
                     // Do nothing (should send a pong though)
-                    println!("Received ping");
+                    // println!("Received ping");
                 }
                 Some(Ok(Message::Close(_))) => {
-                    println!("Client closed connection, exit");
+                    // println!("Client closed connection, exit");
                     break;
                 }
                 Some(Err(e)) => {
-                    println!("Error receiving websocket message: {e:?}");
+                    // println!("Error receiving websocket message: {e:?}");
                     break;
                 }
                 None => {
-                    println!("No data received from websocket");
+                    // println!("No data received from websocket");
                     break;
                 }
             }
@@ -181,15 +185,23 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr) {
     tokio::select! {
         rv_a = (&mut send_task) => {
             match rv_a {
-                Ok(_) => println!("Sent messages"),
-                Err(a) => println!("Error sending messages {a:?}")
+                Ok(_) => {
+                    // println!("Sent messages"),
+                }
+                Err(a) => {
+                    // println!("Error sending messages {a:?}")
+                }
             }
             recv_task.abort();
         },
         rv_b = (&mut recv_task) => {
             match rv_b {
-                Ok(_) => println!("Received messages"),
-                Err(b) => println!("Error receiving messages {b:?}")
+                Ok(_) => {
+                    // println!("Received messages"),
+                }
+                Err(b) => {
+                    // println!("Error receiving messages {b:?}")
+                }
             }
             send_task.abort();
         }

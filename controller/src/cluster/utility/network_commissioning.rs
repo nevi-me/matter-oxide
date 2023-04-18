@@ -5,12 +5,12 @@ use crate::{
     data_model::{Attribute, AttributeValue},
 };
 
-use crate::cluster::{Cluster, ClusterBase};
+use crate::cluster::Cluster;
 
 pub const CLUSTER_ID_AAAA: u16 = 0x0031;
 
 pub struct XXXXCluster<'a> {
-    pub base: ClusterBase<'a>,
+    data_version: &'a u32,
 }
 
 #[repr(u16)]
@@ -77,44 +77,11 @@ pub enum NetworkCommissioningStatus {
     UnknownError = 12,
 }
 
-// // TODO(spec): make it conformant
-// /// A default XXXX cluster that complies with mandatory requirements
-// impl<'a> Default for XXXXCluster<'a> {
-//     fn default() -> Self {
-//         let base = ClusterBase {
-//             id: CLUSTER_ID_AAAA,
-//             classification: ClusterClassification::Utility,
-//             revision: 1,
-//             features: (), // TODO
-//             attributes: &[Self::attribute_default(Attributes::MaxNetworks)],
-//             _phantom: core::marker::PhantomData::default(),
-//         };
-
-//         Self { base }
-//     }
-// }
-
-impl<'a> Cluster for XXXXCluster<'a> {
-    fn base(&self) -> &ClusterBase {
-        &self.base
-    }
-
-    fn base_mut(&mut self) -> &mut ClusterBase {
-        &mut self.base
-    }
-
-    fn try_attribute_default(attribute_value: u16) -> Option<Attribute> {
-        let attribute = Attributes::from_u16(attribute_value).unwrap();
-        Some(Self::attribute_default(attribute))
-    }
-}
-
 impl<'a> XXXXCluster<'a> {
     pub const fn attribute_default(attribute: Attributes) -> Attribute {
         match attribute {
             Attributes::MaxNetworks => Attribute {
                 id: attribute as _,
-                value: AttributeValue::U8(0), // TODO: should be nullable
                 quality: (),
                 access: (),
             },

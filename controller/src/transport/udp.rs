@@ -11,6 +11,9 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use std::sync::Arc;
 
+#[cfg(feature = "std-smol")]
+use smol::net::UdpSocket;
+#[cfg(feature = "std-tokio")]
 use tokio::net::UdpSocket;
 
 #[derive(Clone, Debug)]
