@@ -27,13 +27,15 @@ pub trait ChangeNotifier<T> {
 }
 
 pub trait Handler {
-    fn read(&self, attr: &AttrDetails, encoder: AttrDataEncoder);
+    /// The type of cluster this handler is for. Can be server or client.
+    const HANDLER_TYPE: HandlerType = HandlerType::Server;
+    fn handle_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder);
 
-    fn write(&mut self, _attr: &AttrDetails, _data: &TLVElement) {
+    fn handle_write(&mut self, _attr: &AttrDetails, _data: &TLVElement) {
         panic!("Attribute not found")
     }
 
-    fn invoke(
+    fn handle_invoke(
         &mut self,
         _transaction: &mut Transaction,
         _cmd: &CmdDetails,
@@ -42,28 +44,54 @@ pub trait Handler {
     ) {
         panic!("Command not found")
     }
+
+    // Used for client interactions
+    fn do_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+        panic!("do_read should be used by clients")
+    }
+
+    fn do_write(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+        panic!("do_write should be used by clients")
+    }
+
+    fn do_invoke(
+        &self,
+        _transaction: &mut Transaction,
+        _cmd: &CmdDetails,
+        _data: &TLVElement,
+        _encoder: CmdDataEncoder,
+    ) {
+        panic!("do_invoke should be used by clients")
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum HandlerType {
+    Server = 0,
+    Client = 1,
 }
 
 impl<T> Handler for &mut T
 where
     T: Handler,
 {
-    fn read<'a>(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
-        (**self).read(attr, encoder)
+    fn handle_read<'a>(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+        (**self).handle_read(attr, encoder)
     }
 
-    fn write(&mut self, attr: &AttrDetails, data: &TLVElement) {
-        (**self).write(attr, data)
+    fn handle_write(&mut self, attr: &AttrDetails, data: &TLVElement) {
+        (**self).handle_write(attr, data)
     }
 
-    fn invoke(
+    fn handle_invoke(
         &mut self,
         transaction: &mut Transaction,
         cmd: &CmdDetails,
         data: &TLVElement,
         encoder: CmdDataEncoder,
     ) {
-        (**self).invoke(transaction, cmd, data, encoder)
+        (**self).handle_invoke(transaction, cmd, data, encoder)
     }
 }
 
@@ -90,7 +118,7 @@ impl EmptyHandler {
 }
 
 impl Handler for EmptyHandler {
-    fn read(&self, _attr: &AttrDetails, _encoder: AttrDataEncoder) {
+    fn handle_read(&self, _attr: &AttrDetails, _encoder: AttrDataEncoder) {
         panic!()
     }
 }
@@ -131,23 +159,23 @@ where
     H: Handler,
     T: Handler,
 {
-    fn read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+    fn handle_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
         if self.handler_endpoint == attr.endpoint_id && self.handler_cluster == attr.cluster_id {
-            self.handler.read(attr, encoder)
+            self.handler.handle_read(attr, encoder)
         } else {
-            self.next.read(attr, encoder)
+            self.next.handle_read(attr, encoder)
         }
     }
 
-    fn write(&mut self, attr: &AttrDetails, data: &TLVElement) {
+    fn handle_write(&mut self, attr: &AttrDetails, data: &TLVElement) {
         if self.handler_endpoint == attr.endpoint_id && self.handler_cluster == attr.cluster_id {
-            self.handler.write(attr, data)
+            self.handler.handle_write(attr, data)
         } else {
-            self.next.write(attr, data)
+            self.next.handle_write(attr, data)
         }
     }
 
-    fn invoke(
+    fn handle_invoke(
         &mut self,
         transaction: &mut Transaction,
         cmd: &CmdDetails,
@@ -155,9 +183,9 @@ where
         encoder: CmdDataEncoder,
     ) {
         if self.handler_endpoint == cmd.endpoint_id && self.handler_cluster == cmd.cluster_id {
-            self.handler.invoke(transaction, cmd, data, encoder)
+            self.handler.handle_invoke(transaction, cmd, data, encoder)
         } else {
-            self.next.invoke(transaction, cmd, data, encoder)
+            self.next.handle_invoke(transaction, cmd, data, encoder)
         }
     }
 }

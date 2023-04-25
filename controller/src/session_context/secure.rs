@@ -82,6 +82,7 @@ pub enum SecureSessionType {
 }
 
 #[repr(u8)]
+#[derive(FromPrimitive)]
 pub enum SecureChannelProtocolID {
     MsgCounterSyncReq = 0x00,
     MsgCounterSyncRsp = 0x01,

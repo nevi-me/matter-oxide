@@ -34,14 +34,14 @@ pub type SessionID = u16;
 /// - 01 Protocol OpCode
 /// - 02 Exchange ID
 /// - 02 Protocol ID
-/// - 02 Protocol Vendoer ID [opt]
+/// - 02 Protocol Vendor ID [opt]
 /// - 04 Ack Message Counter [opt]
 /// - vr Secured Extensions [opt]
 /// Applicayion Payload
 /// - vr Application Payload [opt]
 enum X {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub message_header: MessageHeader,
     pub payload_header: Option<ProtocolHeader>,
@@ -218,7 +218,7 @@ impl Message {
     }
 }
 
-#[derive(Default, Debug)] // For testing only
+#[derive(Default, Debug, Clone)] // For testing only
 pub struct MessageHeader {
     pub session_type: SessionType,
     pub message_flags: MessageFlags,
@@ -256,7 +256,7 @@ impl MessageHeader {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ProtocolHeader {
     pub exchange_flags: ExchangeFlags,
     pub protocol_opcode: u8,

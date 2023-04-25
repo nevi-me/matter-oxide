@@ -6,7 +6,7 @@ pub struct UnsecuredSessionContext {
     pub session_role: SessionRole,
     pub local_session_id: u16,
     pub peer_session_id: u16,
-    pub ephemeral_initiator_node_id: i64,
+    pub ephemeral_initiator_node_id: u64,
     // TODO: (4.5.4)
     // It sounds like this state should live outside of the context
     // from 4.5.6 1.c

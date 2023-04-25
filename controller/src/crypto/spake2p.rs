@@ -71,7 +71,7 @@ impl Spake2P {
         let w1 = Self::compute_w_scalar(w1);
         let l = (p256::AffinePoint::GENERATOR * w1).to_encoded_point(false);
 
-        // Compute x (pA)
+        // Compute x (pA) or y (pB)
         let (x, y) = if is_prover {
             let m_affine = p256::AffinePoint::from_encoded_point(&m).unwrap();
             let x = Self::do_add_mul(P, random, m_affine, w0);
@@ -124,6 +124,7 @@ impl Spake2P {
                 self.v = Self::do_add_mul(y, self.w1, n_neg, self.w0 * self.w1);
             }
             Spake2PRole::Verifier => {
+                self.x = value;
                 let tmp = self.random * self.w0;
                 let m_neg = p256::AffinePoint::from_encoded_point(&self.m)
                     .unwrap()

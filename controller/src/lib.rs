@@ -21,7 +21,7 @@ use tokio::{
     },
     task::JoinHandle,
 };
-use transport::udp::{SocketAddress, UdpInterface};
+use transport::udp::UdpInterface;
 
 use crate::{
     crypto::fill_random,
@@ -41,6 +41,7 @@ mod crypto;
 pub mod data_model;
 pub mod end_device;
 pub mod exchange;
+pub mod experimental;
 pub mod fabric;
 pub mod interaction_model;
 pub mod message;

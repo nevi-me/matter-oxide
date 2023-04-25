@@ -14,7 +14,15 @@ use tokio::{
 };
 
 use crate::{
+    cluster::utility::{
+        basic_information::DeviceInformation, general_commissioning::GeneralCommissioningCluster,
+    },
     crypto::fill_random,
+    data_model::{
+        device::{Device, Endpoint, Node},
+        device_type::root_node::DEVICE_TYPE_ROOT_NODE,
+        endpoint::root_endpoint,
+    },
     exchange::ExchangeManager,
     message::status_report::{GeneralCode, StatusReport},
     message::{Message, SessionType},
@@ -23,53 +31,47 @@ use crate::{
         SecureChannelProtocolCode, SecureChannelProtocolID, SecureSessionContext, SessionContext,
         SessionManager,
     },
-    transport::udp::{SocketAddress, UdpInterface},
+    transport::{udp::UdpInterface, SocketAddress},
 };
 
 pub type TlvAnyData = heapless::Vec<u8, 1024>;
 
-pub struct Controller {
+pub struct Controller<'a, H> {
     fabric: (),
-    nodes: Vec<()>,
+    device: Device<'a, H>,
     last_node_id: i64,
     pase_session_ids: HashSet<u16>,
     exchange_manager: ExchangeManager,
-    session_manager: SessionManager,
+    // session_manager: SessionManager,
     message_sender: Sender<(Message, SocketAddress)>,
     udp: UdpInterface,
     // TODO: This should probably be in the exchange manager
     message_store: Arc<RwLock<HashMap<(u16, SessionType), Message>>>,
 }
 
-impl Controller {
-    pub async fn new() -> Self {
-        // let keypair = Self::get_or_generate_keypair().unwrap();
-        // let fabric = Fabric::new(
-        //     keypair, (), None, (), &[], 1
-        // ).unwrap();
-
-        // Session Manager
-        // Channel Manager creates channels to nodes and caches them
-        // Exchange Manager mostly receives messages from channels
-        // PaseClient initiates pairing
-        // CaseClient does same
-
+impl<'a, H> Controller<'a, H> {
+    pub async fn new(node: &'a Node<'a>, handler: H) -> Controller<'a, H> {
         /*
         What if the matter controller owns the message channel, hands off the receiver
         to the exchange, and then polls at its level, sending messages appropriately?
         That isolates running the loop in one place, here.
          */
         let (sender, receiver) = tokio::sync::mpsc::channel::<(Message, SocketAddress)>(32);
-        let local_address: std::net::SocketAddr = "[::]:0".parse().unwrap();
+        let local_address: std::net::SocketAddr = "0.0.0.0:5541".parse().unwrap();
         let local_address = SocketAddress::from_std(&local_address);
         let udp = UdpInterface::new(local_address).await;
-        let controller = Self {
+        // Temporary
+        udp.socket()
+            .connect("127.0.0.1:5540".parse::<SocketAddr>().unwrap())
+            .await
+            .unwrap();
+        let device = Device::new(node, handler);
+        let controller = Controller {
             fabric: (),
-            nodes: vec![],
+            device,
             last_node_id: 0,
             pase_session_ids: HashSet::with_capacity(32),
             exchange_manager: ExchangeManager::new(),
-            session_manager: SessionManager::new(),
             message_sender: sender,
             udp,
             message_store: Arc::new(RwLock::new(HashMap::with_capacity(64))),
@@ -107,6 +109,7 @@ impl Controller {
                 // Decode the message but not decrypt it
                 // println!("Received from {peer} {}", hex::encode(&buf[..len]));
                 let mut message = Message::decode(&buf[..len]);
+                // self.exchange_manager.receive_message(&mut message);
                 // TODO don't decrypt here, using it to test
                 message.decrypt(None);
                 let key = (
@@ -129,7 +132,6 @@ impl Controller {
         discriminator: u8,
         pin: u32,
     ) {
-        // println!("Commission with PIN");
         /*
         How do we send and receive simultaneously? We want MRP built in, so for each stage of commissioning,
         we would want to be able to retry sending until we get an ack. Then after processing, move to the
@@ -142,16 +144,16 @@ impl Controller {
         let message_counter = u32::from_le_bytes(message_counter);
 
         let session_type = SessionType::UnsecuredSession;
-        // TODO: create an insecure session here and use its ID
-        let session_id = self.session_manager.next_session_id();
-        let exchange_id = self.exchange_manager.new_exchange_unsecured(session_id);
+        let (exchange_id, session_id) = self.exchange_manager.new_initiator_exchange_unsecured();
         let mut pake_interaction =
             PASEManager::initiator(pin, session_id, exchange_id, message_counter);
 
         // Send param request
         let request_message = {
-            let exchange = self.exchange_manager.find_exchange(exchange_id);
-            pake_interaction.pbkdf_param_request(exchange.unsecured_session_context_mut())
+            let session = self
+                .exchange_manager
+                .unsecured_session_context_mut(session_id);
+            pake_interaction.pbkdf_param_request(session)
         };
         self.send_message(request_message, remote_address.clone())
             .await;
@@ -163,8 +165,10 @@ impl Controller {
             heapless::Vec::from_slice(response_message.payload.as_slice()).unwrap(),
         );
         let mut pake1_message = {
-            let exchange = self.exchange_manager.find_exchange(exchange_id);
-            pake_interaction.pake1(exchange.unsecured_session_context_mut())
+            let session = self
+                .exchange_manager
+                .unsecured_session_context_mut(session_id);
+            pake_interaction.pake1(session)
         };
         // Acknowledge previous response
         pake1_message.with_ack(next_ack);
@@ -206,8 +210,8 @@ impl Controller {
         // ack();
 
         // Add session to session manager
-        self.session_manager
-            .add_session(SessionContext::Secure(secured_session), false);
+        self.exchange_manager
+            .add_session(SessionContext::Secure(secured_session));
 
         /*
         How do we know when we've received a message that's moved the processing forward?
@@ -245,7 +249,7 @@ impl Controller {
                 // Decrypt the message if it is secure
                 match session_type {
                     SessionType::SecureUnicast(_) | SessionType::SecureGroup(_) => {
-                        let SessionContext::Secure(session) = self.session_manager.get_session(session_id) else {
+                        let SessionContext::Secure(session) = self.exchange_manager.session_context(session_id) else {
                             panic!("Session in context not a SecureSession");
                         };
                         message.decrypt(Some(&session.decryption_key));
@@ -260,73 +264,129 @@ impl Controller {
 
     /// Send a message, encrypting it if required
     async fn send_message(&mut self, mut message: Message, peer: SocketAddress) {
-        let session_context = self
-            .session_manager
-            .get_session(message.message_header.session_id);
-        match &session_context {
-            SessionContext::MCSP => {}
-            SessionContext::Secure(session) => {
-                message.encrypt(&session.encryption_key);
-            }
-            SessionContext::Unsecured(_) => todo!(),
-        }
+        // let session_context = self
+        //     .exchange_manager
+        //     .session_context(message.message_header.session_id);
+        // match &session_context {
+        //     SessionContext::MCSP => {}
+        //     SessionContext::Secure(session) => {
+        //         message.encrypt(&session.encryption_key);
+        //     }
+        //     SessionContext::Unsecured(_) => todo!(),
+        // }
 
         // Send message
         self.message_sender.send((message, peer)).await.unwrap();
     }
-
-    // fn get_or_generate_keypair() -> Result<KeyPair, ()> {
-    //     let path = "fabric_keypair.json";
-    //     let exists = std::fs::metadata(path).is_ok();
-    //     if exists {
-    //         let keypair_file = std::fs::File::open(path).unwrap();
-    //         let data: KeyPairStorage = serde_json::from_reader(keypair_file).unwrap();
-    //         let keypair = KeyPair::new_from_components(&data.public, &data.private).unwrap();
-    //         Ok(keypair)
-    //     } else {
-    //         let keypair = KeyPair::new().map_err(|e| {
-    //             e// println!("Unable to generate keypair: {e:?}");
-    //         })?;
-    //         // Persist it
-    //         let mut private_key = [0u8; 64];
-    //         let mut public_key = [0u8; 32];
-    //         let keypair_file = std::fs::File::create(path).unwrap();
-    //         let len = keypair.get_private_key(&mut private_key).unwrap();
-    //         assert_eq!(len, private_key.len());
-    //         let len = keypair.get_public_key(&mut public_key).unwrap();
-    //         assert_eq!(len, public_key.len());
-    //         serde_json::to_writer(
-    //             keypair_file,
-    //             &KeyPairStorage {
-    //                 private: private_key.to_vec(),
-    //                 public: public_key.to_vec(),
-    //             },
-    //         )
-    //         .unwrap();
-    //         Ok(keypair)
-    //     }
-    // }
 }
 
-// #[derive(serde::Serialize, serde::Deserialize)]
-// struct KeyPairStorage {
-//     private: Vec<u8>,
-//     public: Vec<u8>,
-// }
+pub type CommissioningController<'a> = Controller<'a, root_endpoint::RootEndpointHandler<'a>>;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub async fn commission_with_pin<'a>(
+    controller: &mut CommissioningController<'a>,
+    remote_address: SocketAddress,
+    discriminator: u8,
+    pin: u32,
+) -> () {
+    /*
+    The flaw here is that we're not using the inner layers to send responses, we want to do that.
+    How do we get there?
+    Let's create a commissioning client first.
+     */
+    let mut message_counter = [0; 4];
+    fill_random(&mut message_counter);
+    let message_counter = u32::from_le_bytes(message_counter);
 
-    #[tokio::test]
-    #[ignore = "used for manual testing only"]
-    async fn test_commissioning() {
-        let mut controller = Controller::new().await;
-        let remote_address = "[::ffff:192.168.101.172]:5540"
-            .parse::<std::net::SocketAddr>()
-            .unwrap();
-        controller
-            .commission_with_pin(SocketAddress::from_std(&remote_address), 250, 123456)
-            .await;
-    }
+    let session_type = SessionType::UnsecuredSession;
+    let (exchange_id, session_id) = controller
+        .exchange_manager
+        .new_initiator_exchange_unsecured();
+    let mut pake_interaction =
+        PASEManager::initiator(pin, session_id, exchange_id, message_counter);
+
+    // Send param request
+    let request_message = {
+        let session = controller
+            .exchange_manager
+            .unsecured_session_context_mut(session_id);
+        pake_interaction.pbkdf_param_request(session)
+    };
+    controller
+        .send_message(request_message, remote_address.clone())
+        .await;
+    let response_message = controller.wait_for_message(0, session_type).await;
+    let next_ack = response_message.next_ack();
+
+    let peer_session_id = response_message.message_header.session_id;
+    pake_interaction.set_pbkdf_param_response(
+        heapless::Vec::from_slice(response_message.payload.as_slice()).unwrap(),
+    );
+    let mut pake1_message = {
+        let session = controller
+            .exchange_manager
+            .unsecured_session_context_mut(session_id);
+        pake_interaction.pake1(session)
+    };
+    // Acknowledge previous response
+    pake1_message.with_ack(next_ack);
+    controller
+        .send_message(pake1_message, remote_address.clone())
+        .await;
+    let mut pake2_message = controller.wait_for_message(0, session_type).await;
+    // pake2_message.decrypt(None);
+    let next_ack = pake2_message.next_ack();
+    let pake2 = Pake2::from_tlv(&pake2_message.payload);
+    let mut pake3_message = pake_interaction.pake3(&pake2);
+    pake3_message.with_ack(next_ack);
+    controller
+        .send_message(pake3_message, remote_address.clone())
+        .await;
+    let pake_finished_message = controller.wait_for_message(0, session_type).await;
+    let next_ack = pake_finished_message.next_ack();
+
+    // Check that commissioning is successful
+    let payload_header = pake_finished_message.payload_header.as_ref().unwrap();
+    assert_eq!(
+        payload_header.protocol_opcode,
+        SecureChannelProtocolID::StatusReport as u8
+    );
+    let status_report = StatusReport::from_payload(&pake_finished_message.payload);
+    assert_eq!(status_report.general_code, GeneralCode::Success);
+    assert_eq!(
+        status_report.protocol_code,
+        SecureChannelProtocolCode::SessionEstablishmentSuccess as u16
+    );
+
+    // Get secrets
+    let (k_e, c_a, c_b) = pake_interaction.get_secrets();
+
+    // Create a new secured session
+    let mut secured_session =
+        SecureSessionContext::new_pase(true, false, session_id, peer_session_id, k_e, &[]);
+    drop(pake_interaction);
+
+    // Send standalone ack for now, then work on the interaction client
+    // ack();
+
+    // Add session to session manager
+    controller
+        .exchange_manager
+        .add_session(SessionContext::Secure(secured_session));
+
+    /*
+    How do we know when we've received a message that's moved the processing forward?
+    Whatever can be mutated by the exchange should probably be owned by it, right?
+    The PAKE interaction is a good candidate.
+    As there are 4 kinds of sessions, is it possible to have the exchange own them?
+     */
+
+    // Open PASE channel
+    // PASE pairing to get a secured channel
+    // Start commissioning
+    // Interaction client
+    // Basic cluster client
+    // Perform commissioning with a GeneralCommissioningClusterClient
+    // - arm failsafe
+    // - regulatory info
+    // OperationalCredentialsClusterClient
 }

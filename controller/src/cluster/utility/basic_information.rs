@@ -129,7 +129,7 @@ impl<'a> BasicInformationCluster<'a> {
 }
 
 impl<'a> Handler for BasicInformationCluster<'a> {
-    fn read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+    fn handle_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
         todo!()
     }
 }

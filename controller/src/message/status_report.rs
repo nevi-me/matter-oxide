@@ -1,4 +1,4 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 use num::FromPrimitive;
 
 /// Status Report Message (Appendix D)
@@ -32,10 +32,21 @@ impl StatusReport {
             protocol_data: payload.to_vec(),
         }
     }
+
+    pub fn to_payload(&self, mut payload: &mut [u8]) {
+        payload.put_u16_le(self.general_code as u16);
+        payload.put_u32_le(self.protocol_id);
+        // TODO: should this be conditional?
+        if self.protocol_code > 0 {
+            payload.put_u16_le(self.protocol_code);
+        }
+
+        payload.put_slice(&self.protocol_data);
+    }
 }
 
 #[repr(u16)]
-#[derive(FromPrimitive, PartialEq, Eq, Debug)]
+#[derive(FromPrimitive, PartialEq, Eq, Debug, Clone, Copy)]
 pub enum GeneralCode {
     Success = 0,
     Failure,

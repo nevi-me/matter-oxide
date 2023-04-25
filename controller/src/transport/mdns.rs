@@ -101,7 +101,7 @@ pub async fn query_service() {
     while let Some(Ok(response)) = stream.next().await {
         let addr = response.records().collect::<Vec<_>>();
         let txt = response.txt_records().collect::<Vec<_>>();
-        // dbg!(&response);
+        dbg!(&response);
         // let x = response.hostname();
         // dbg!(x);
         // dbg!(txt);

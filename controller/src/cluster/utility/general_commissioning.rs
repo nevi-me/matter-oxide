@@ -65,11 +65,11 @@ impl GeneralCommissioningCluster {
         &self.fail_safe
     }
 
-    pub fn read(&self, attr: AttrDetails, encoder: &mut Encoder) {
+    pub fn handle_read(&self, attr: AttrDetails, encoder: &mut Encoder) {
         todo!()
     }
 
-    pub fn invoke(
+    pub fn handle_invoke(
         &mut self,
         session: &mut SecureSessionContext,
         cmd: &CmdDetails,
@@ -108,15 +108,23 @@ impl GeneralCommissioningCluster {
 }
 
 impl Handler for GeneralCommissioningCluster {
-    fn read(&self, attr: &AttrDetails, encoder: crate::data_model::handler::AttrDataEncoder) {
+    fn handle_read(
+        &self,
+        attr: &AttrDetails,
+        encoder: crate::data_model::handler::AttrDataEncoder,
+    ) {
         todo!()
     }
 
-    fn write(&mut self, _attr: &AttrDetails, _data: &crate::data_model::handler::TLVElement) {
+    fn handle_write(
+        &mut self,
+        _attr: &AttrDetails,
+        _data: &crate::data_model::handler::TLVElement,
+    ) {
         panic!("Attribute not found")
     }
 
-    fn invoke(
+    fn handle_invoke(
         &mut self,
         _transaction: &mut crate::data_model::handler::Transaction,
         _cmd: &CmdDetails,

@@ -5,11 +5,11 @@ use crate::{
 
 use super::pake::SedParameters;
 
-pub struct CaseInteraction {
+pub struct CASEManager {
     session_context: SecureSessionContext,
 }
 
-impl CaseInteraction {
+impl CASEManager {
     pub fn sigma1(&mut self) -> Message {
         // Generate random number
         // Generate session ID

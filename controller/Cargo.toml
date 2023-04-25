@@ -9,7 +9,6 @@ edition = "2021"
 default = ["controller"]
 # default = []
 std = [
-    "serde_json/std",
     "hex/std",
     "rand/std",
     "x509-cert/std"
@@ -27,9 +26,6 @@ std-tokio = ["std", "tokio"]
 [dependencies]
 libmdns = "0.7"
 mdns = "3"
-
-## requires std
-serde_json = { version = "1", default-features = false, optional = true }
 
 ## no_std by default
 num = "0.4"
@@ -55,8 +51,8 @@ x509-cert = { version = "0.2.0", default-features = false, features = ["pem"] }
 ## optional no_std
 hex = { version = "0.4", default-features = false }
 rand = { version = "0.8", default-features = false }
-serde = { version =  "1", default-features = false, features = ["derive"] }
 once_cell = { version = "1", default-features = false, features = [] }
+thingbuf = { version = "0.1", default-features = false, features = ["static"] }
 
 ## async
 futures-util = { version = "0.3", default-features = false, features = ["async-await"] }

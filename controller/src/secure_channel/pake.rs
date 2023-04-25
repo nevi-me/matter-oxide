@@ -1,9 +1,9 @@
 use crate::{
     constants::*,
     crypto::{fill_random, pbkdf2_hmac, sha256 as crypto_sha256, spake2p::Spake2P},
-    message::*,
+    message::{*, status_report::StatusReport},
     session_context::{
-        SecureChannelProtocolID, SecureSessionContext, SessionRole, UnsecuredSessionContext,
+        SecureChannelProtocolID, SecureSessionContext, SessionRole, UnsecuredSessionContext, SecureChannelProtocolCode,
     },
     tlv::*,
 };
@@ -132,7 +132,7 @@ impl PASEManager {
 
     pub fn pbkdf_param_response(
         &mut self,
-        session_context: &mut SecureSessionContext,
+        session_context: &mut UnsecuredSessionContext,
         request: &PBKDFParamRequest,
     ) -> Message {
         assert_eq!(session_context.session_role, SessionRole::Responder);
@@ -239,6 +239,8 @@ impl PASEManager {
         let mut c_b = [0; CRYPTO_HASH_LEN_BYTES];
         s2p.compute_key_schedule(&context, &mut k_e, &mut c_a, &mut c_b);
 
+        // dbg!((&k_e, &c_a, &c_b));
+
         let pake2 = Pake2 {
             p_b: s2p.our_key_share().try_into().unwrap(),
             c_b,
@@ -251,9 +253,18 @@ impl PASEManager {
         self.c_b = c_b;
         self.k_e = k_e;
 
+        // DRY: Payload header
+        let mut payload_header = ProtocolHeader::default();
+        payload_header.exchange_id = self.exchange_id;
+        // Secure channel by default
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::RELIABILITY, true);
+        payload_header.protocol_opcode = SecureChannelProtocolID::PASEPake2 as _;
+
         Message {
             message_header: self.message_header(),
-            payload_header: None, // TODO
+            payload_header: Some(payload_header),
             payload: encoded.inner(),
             integrity_check: None,
         }
@@ -274,6 +285,8 @@ impl PASEManager {
         let s2p = self.spake2p.as_mut().unwrap();
         s2p.compute_peer_key_share(&request.p_b);
         s2p.compute_key_schedule(&context, &mut k_e, &mut c_a, &mut c_b);
+
+        // dbg!((&k_e, &c_a, &c_b));
 
         // Verify Pake2.cB against cB
         assert_eq!(c_b, request.c_b);
@@ -312,13 +325,37 @@ impl PASEManager {
 
         // Refer to PakeFinished for more instructions
 
+        // DRY: Payload header
+        let mut payload_header = ProtocolHeader::default();
+        payload_header.exchange_id = self.exchange_id;
+        // Secure channel by default
+        payload_header
+            .exchange_flags
+            .set(ExchangeFlags::RELIABILITY, true);
+        payload_header.protocol_opcode = SecureChannelProtocolID::StatusReport as _;
+        let status_report = StatusReport {
+            general_code: status_report::GeneralCode::Success,
+            // TODO: there's a mismatch here, we're going from u16 to u32
+            protocol_id: ProtocolID::SecureChannel as u32,
+            protocol_code: SecureChannelProtocolCode::SessionEstablishmentSuccess as _,
+            protocol_data: vec![],
+        };
+
+        // TODO: too many allocations :/
+        let mut payload = [0u8; 8];
+        status_report.to_payload(&mut payload);
+        let payload = heapless::Vec::from_slice(&payload).unwrap();
+
         Message {
             // TODO: is header different?
             message_header: self.message_header(),
-            payload_header: None,
-            payload: Default::default(),
+            payload_header: Some(payload_header),
+            payload,
             integrity_check: None,
         }
+    }
+    pub fn set_pbkdf_param_request(&mut self, value: heapless::Vec<u8, 512>) {
+        self.pbkdf_param_request = value;
     }
 
     pub fn set_pbkdf_param_response(&mut self, value: heapless::Vec<u8, 512>) {
@@ -370,7 +407,7 @@ pub struct PBKDFParamRequest {
 }
 
 impl PBKDFParamRequest {
-    fn to_tlv(&self) -> Encoder {
+    pub fn to_tlv(&self) -> Encoder {
         let mut encoder = Encoder::default();
         encoder.write(
             TlvType::Structure,
@@ -407,7 +444,7 @@ impl PBKDFParamRequest {
         encoder
     }
 
-    fn from_tlv(data: &[u8]) -> Self {
+    pub fn from_tlv(data: &[u8]) -> Self {
         let tlv = decode(data);
         let mut initiator_random = None;
         let mut initiator_session_id = None;
@@ -697,7 +734,7 @@ pub struct Pake1 {
 }
 
 impl Pake1 {
-    fn to_tlv(&self) -> Encoder {
+    pub fn to_tlv(&self) -> Encoder {
         let mut encoder = Encoder::default();
 
         encoder.write(
@@ -719,7 +756,7 @@ impl Pake1 {
         encoder
     }
 
-    fn from_tlv(data: &[u8]) -> Self {
+    pub fn from_tlv(data: &[u8]) -> Self {
         let tlv = decode(data);
         let mut p_a = None;
 
@@ -824,7 +861,7 @@ pub struct Pake3 {
 }
 
 impl Pake3 {
-    fn to_tlv(&self) -> Encoder {
+    pub fn to_tlv(&self) -> Encoder {
         let mut encoder = Encoder::default();
 
         encoder.write(
@@ -846,7 +883,7 @@ impl Pake3 {
         encoder
     }
 
-    fn from_tlv(data: &[u8]) -> Self {
+    pub fn from_tlv(data: &[u8]) -> Self {
         let tlv = decode(data);
         let mut c_a = None;
 

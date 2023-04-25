@@ -8,9 +8,7 @@ pub mod unsecured;
 pub use secure::*;
 pub use unsecured::*;
 
-use crate::crypto::fill_random;
-
-pub type SessionID = u16;
+use crate::{crypto::fill_random, message::SessionID};
 
 pub struct SessionManager {
     // TODO: can I make this take only secure sessions?
@@ -45,7 +43,12 @@ impl SessionManager {
                     id
                 }
             }
-            SessionContext::Unsecured(_) => todo!(),
+            SessionContext::Unsecured(unsecured) => {
+                // Unsecured sessions have ID = 0
+                // assert_eq!(unsecured.local_session_id, 0);
+                // assert_eq!(unsecured.peer_session_id, 0);
+                unsecured.local_session_id
+            }
         };
         self.sessions.insert(session_id, session_context);
         session_id
@@ -55,13 +58,14 @@ impl SessionManager {
     pub fn new_session(&mut self, role: SessionRole) -> SessionID {
         panic!()
     }
-
+    
     pub fn get_session(&self, id: SessionID) -> &SessionContext {
-        panic!()
+        dbg!(id);
+        self.sessions.get(&id).unwrap()
     }
 
     pub fn get_session_mut(&mut self, id: SessionID) -> &mut SessionContext {
-        panic!()
+        self.sessions.get_mut(&id).unwrap()
     }
 
     pub fn remove_session(&mut self, id: SessionID) {}

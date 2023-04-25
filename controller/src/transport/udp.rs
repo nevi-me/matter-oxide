@@ -6,9 +6,6 @@ In that case, it'd need to connect each time it needs to make some interaction w
 So we mostly need a UDP client as a start
  */
 
-#[cfg(feature = "std")]
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-
 use std::sync::Arc;
 
 #[cfg(feature = "std-smol")]
@@ -16,44 +13,7 @@ use smol::net::UdpSocket;
 #[cfg(feature = "std-tokio")]
 use tokio::net::UdpSocket;
 
-#[derive(Clone, Debug)]
-pub enum SocketAddress {
-    V4((heapless::Vec<u8, 4>, u16)),
-    V6((heapless::Vec<u16, 8>, u16)),
-}
-
-impl SocketAddress {
-    #[cfg(feature = "std")]
-    pub fn to_std(&self) -> std::net::SocketAddr {
-        match self {
-            SocketAddress::V4((addr, port)) => {
-                let addr = [addr[0], addr[0], addr[2], addr[3]];
-                SocketAddr::V4(SocketAddrV4::new(addr.into(), *port))
-            }
-            SocketAddress::V6((addr, port)) => {
-                let addr = [
-                    addr[0], addr[0], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7],
-                ];
-                SocketAddr::V6(SocketAddrV6::new(addr.into(), *port, 0, 0))
-            }
-        }
-    }
-
-    #[cfg(feature = "std")]
-    pub fn from_std(addr: &std::net::SocketAddr) -> Self {
-        match addr {
-            SocketAddr::V4(v4) => Self::V4((
-                heapless::Vec::from_slice(&v4.ip().octets()).unwrap(),
-                v4.port(),
-            )),
-            SocketAddr::V6(v6) => {
-                // Have to cast [u8; 16] to [u16; 8]
-                let address = unsafe { core::mem::transmute::<_, &[u16; 8]>(v6.ip()) };
-                Self::V6((heapless::Vec::from_slice(&address[..]).unwrap(), v6.port()))
-            }
-        }
-    }
-}
+use super::SocketAddress;
 
 #[derive(Clone)]
 pub struct UdpListener {
@@ -114,11 +74,15 @@ impl UdpInterface {
     }
     /// Send a message to the remote address that we've connected to
     pub async fn send_to(&self, msg: &[u8], remote_address: SocketAddress) -> usize {
-        self.listener
+        println!("Sending to {remote_address:?}");
+        let len = self.listener
             .socket
-            .send_to(msg, remote_address.to_std())
+            .send(msg)
+            // .send_to(msg, remote_address.to_std())
             .await
-            .unwrap()
+            .unwrap();
+        println!("Sent message with len {len}");
+        len
     }
 
     /// To read from the socket, it looks like one has to do their own polling,

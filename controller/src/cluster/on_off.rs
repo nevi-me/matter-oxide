@@ -122,7 +122,7 @@ impl OnOffCluster {
 }
 
 impl Handler for OnOffCluster {
-    fn read(
+    fn handle_read(
         &self,
         attr: &crate::data_model::handler::AttrDetails,
         encoder: crate::data_model::handler::AttrDataEncoder,
@@ -130,7 +130,7 @@ impl Handler for OnOffCluster {
         todo!()
     }
 
-    fn write(
+    fn handle_write(
         &mut self,
         _attr: &crate::data_model::handler::AttrDetails,
         _data: &crate::data_model::handler::TLVElement,
@@ -138,7 +138,7 @@ impl Handler for OnOffCluster {
         panic!("Attribute not found")
     }
 
-    fn invoke(
+    fn handle_invoke(
         &mut self,
         _transaction: &mut crate::data_model::handler::Transaction,
         _cmd: &crate::data_model::handler::CmdDetails,
