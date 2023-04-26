@@ -8,7 +8,11 @@ use matter_controller::{
     },
     end_device::EndDevice,
     message::{Message, ProtocolID},
-    transport::{udp::UdpInterface, Packet, SocketAddress},
+    transport::{
+        mdns::{DnsServiceMode, MdnsHandler},
+        udp::UdpInterface,
+        Packet, SocketAddress,
+    },
 };
 use num::FromPrimitive;
 use thingbuf::mpsc::StaticChannel;
@@ -43,7 +47,7 @@ async fn main() {
             },
         ],
     };
-    let device_handler = root_endpoint::handler(0, device_info).chain(
+    let device_handler = root_endpoint::handler(0, device_info.clone()).chain(
         1,
         0,
         extended_color_light_endpoint::handler(1),
@@ -52,7 +56,7 @@ async fn main() {
     let mut end_device = EndDevice::new(&node, device_handler, message_sender.clone()).await;
 
     // let local_address: std::net::SocketAddr = "192.168.86.197:5540".parse().unwrap();
-    let local_address: std::net::SocketAddr = "0.0.0.0:5540".parse().unwrap();
+    let local_address: std::net::SocketAddr = "[::]:5540".parse().unwrap();
 
     /*
     The above is async, so we can spawn separate tasks for
@@ -75,17 +79,28 @@ async fn main() {
     let udp = UdpInterface::new(SocketAddress::from_std(&local_address)).await;
     let socket = udp.socket();
     // TODO: Temp
-    socket.connect("127.0.0.1:5541".parse::<std::net::SocketAddr>().unwrap()).await.unwrap();
+    // socket
+    //     .connect("[::]:5550".parse::<std::net::SocketAddr>().unwrap())
+    //     .await
+    //     .unwrap();
+    // Publish mDNS service
+    let mut i = 0;
+    while i < 3 {
+        MdnsHandler::publish_service("304763D1FA4BA463", DnsServiceMode::Commissionable(1), &device_info);
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        i += 1;
+    }
     let send_socket = udp.socket();
     let send_future = tokio::task::spawn(async move {
         let mut bytes = BytesMut::with_capacity(1024);
         while let Some(message) = message_receiver.recv_ref().await {
             println!("Received message from channel buffer, sending to peer");
             // Send the message to destination
-            // let address = message.recipient.as_ref().unwrap().to_std();
+            let address = message.recipient.as_ref().unwrap().to_std();
+            dbg!(&address);
             send_socket
-                .send(message.bytes.to_vec().as_slice())
-                // .send_to(message.bytes.to_vec().as_slice(), address)
+                // .send(message.bytes.to_vec().as_slice())
+                .send_to(message.bytes.to_vec().as_slice(), address)
                 .await
                 .unwrap();
             bytes.clear();
@@ -107,13 +122,20 @@ async fn main() {
                     let session_context = end_device
                         .exchange_manager
                         .unsecured_session_context_mut(message.message_header.session_id);
-                    let response_message = end_device
+                    let (response_message, maybe_session) = end_device
                         .secure_channel
                         .on_message(session_context, &message);
+
+                    if let Some(session) = maybe_session {
+                        end_device.exchange_manager.add_session(
+                            matter_controller::session_context::SessionContext::Secure(session),
+                        );
+                    }
 
                     {
                         // Send a message by writing it directly to the channel buffer
                         let mut sender = end_device.message_sender.send_ref().await.unwrap();
+                        dbg!(&peer);
                         sender.recipient = Some(SocketAddress::from_std(&peer));
                         response_message.encode(&mut sender.bytes, None);
                     }
@@ -133,7 +155,7 @@ async fn main() {
                     // }
                 }
                 ProtocolID::InteractionModel => {
-                    todo!()
+                    todo!("Interaction Model")
                 }
                 ProtocolID::UserDirectedComm => {
                     todo!()

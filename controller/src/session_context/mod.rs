@@ -58,7 +58,7 @@ impl SessionManager {
     pub fn new_session(&mut self, role: SessionRole) -> SessionID {
         panic!()
     }
-    
+
     pub fn get_session(&self, id: SessionID) -> &SessionContext {
         dbg!(id);
         self.sessions.get(&id).unwrap()

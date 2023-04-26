@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use tokio::sync::mpsc::Receiver;
 
 use crate::{
-    message::{ExchangeFlags, Message, MessageFlags, SecurityFlags, SessionType, SessionID},
+    message::{ExchangeFlags, Message, MessageFlags, SecurityFlags, SessionID, SessionType},
     session_context::{
         SecureSessionContext, SecureSessionType, SessionContext, SessionManager, SessionRole,
         UnsecuredSessionContext,
@@ -195,15 +195,16 @@ impl ExchangeManager {
         match exchange {
             Some(exchange) => {
                 assert_eq!(exchange.session_id, message.message_header.session_id);
-                // dbg!(&payload_header.exchange_flags);
-                // dbg!(&exchange);
                 let check = payload_header
                     .exchange_flags
                     .contains(ExchangeFlags::INITIATOR) as u8
                     + (exchange.exchange_role != ExchangeRole::Responder) as u8;
                 assert_eq!(check, 1);
             }
-            None if payload_header.exchange_flags.contains(ExchangeFlags::INITIATOR) => {
+            None if payload_header
+                .exchange_flags
+                .contains(ExchangeFlags::INITIATOR) =>
+            {
                 // Unsolicited message (4.9.5.2)
                 // TODO: Should not have a duplicate counter
                 // TODO: has to have a registered protocol ID

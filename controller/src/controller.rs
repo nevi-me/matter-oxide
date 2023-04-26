@@ -380,8 +380,16 @@ pub async fn commission_with_pin<'a>(
     As there are 4 kinds of sessions, is it possible to have the exchange own them?
      */
 
-    // Open PASE channel
-    // PASE pairing to get a secured channel
+    // Arm fail-safe
+    /*
+    The commisisoning client should be able to send a command to arm failsafe.
+    Let's say we have the commissioning client, can we access it from here?
+    Yes, we can access it. So let's create a client method and call it.
+     */
+    controller.device.handler.next.handler.fail_safe();
+
+    // ✅ Open PASE channel
+    // ✅ PASE pairing to get a secured channel
     // Start commissioning
     // Interaction client
     // Basic cluster client

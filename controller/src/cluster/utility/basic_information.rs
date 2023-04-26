@@ -106,6 +106,7 @@ pub struct BasicInformationCluster<'a> {
     info: DeviceInformation<'a>,
 }
 
+#[derive(Clone)]
 pub struct DeviceInformation<'a> {
     pub vendor_id: u16,
     pub product_id: u16,

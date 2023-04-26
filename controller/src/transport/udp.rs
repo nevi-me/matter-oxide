@@ -75,10 +75,11 @@ impl UdpInterface {
     /// Send a message to the remote address that we've connected to
     pub async fn send_to(&self, msg: &[u8], remote_address: SocketAddress) -> usize {
         println!("Sending to {remote_address:?}");
-        let len = self.listener
+        let len = self
+            .listener
             .socket
-            .send(msg)
-            // .send_to(msg, remote_address.to_std())
+            // .send(msg)
+            .send_to(msg, remote_address.to_std())
             .await
             .unwrap();
         println!("Sent message with len {len}");

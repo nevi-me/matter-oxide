@@ -1,9 +1,10 @@
 use crate::{
     constants::*,
     crypto::{fill_random, pbkdf2_hmac, sha256 as crypto_sha256, spake2p::Spake2P},
-    message::{*, status_report::StatusReport},
+    message::{status_report::StatusReport, *},
     session_context::{
-        SecureChannelProtocolID, SecureSessionContext, SessionRole, UnsecuredSessionContext, SecureChannelProtocolCode,
+        SecureChannelProtocolCode, SecureChannelProtocolID, SecureSessionContext, SessionRole,
+        UnsecuredSessionContext,
     },
     tlv::*,
 };
@@ -502,8 +503,16 @@ impl PBKDFParamRequest {
                     }
                 }
                 TagControl::ContextSpecific(3) => {
-                    if let TagLengthValue::Unsigned16(value) = element.get_value() {
-                        passcode_id = Some(value);
+                    match element.get_value() {
+                        TagLengthValue::Unsigned8(value) => {
+                            passcode_id = Some(value as _)
+                        }
+                        TagLengthValue::Unsigned16(value) => {
+                            passcode_id = Some(value as _)
+                        }
+                        _ => {
+                            panic!("Unexpected type for passcode_id")
+                        }
                     }
                 }
                 TagControl::ContextSpecific(4) => {
@@ -528,7 +537,7 @@ impl PBKDFParamRequest {
         Self {
             initiator_random: initiator_random.unwrap(),
             initiator_session_id: initiator_session_id.unwrap(),
-            passcode_id: passcode_id.unwrap(),
+            passcode_id: passcode_id.unwrap_or_default(), // TODO: fix
             has_pbkdf_params: has_pbkdf_params.unwrap(),
             initiator_sed_params,
         }

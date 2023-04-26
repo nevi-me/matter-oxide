@@ -1,3 +1,4 @@
+use core::fmt::Write;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::Mutex,
@@ -5,6 +6,8 @@ use std::{
 
 use libmdns::{Responder, Service};
 use once_cell::sync::Lazy;
+
+use crate::cluster::utility::basic_information::DeviceInformation;
 
 pub const MDNS_BROADCAST_IPV4: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251); // "224.0.0.251"
 pub const MDNS_BROADCAST_IPV6: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0x00FA); // "ff02::fb"
@@ -26,14 +29,22 @@ pub struct MdnsHandler {
 }
 
 impl MdnsHandler {
-    pub fn publish_service(name: &str, mode: DnsServiceMode) -> MdnsService {
+    pub fn publish_service(name: &str, mode: DnsServiceMode, device_info: &DeviceInformation) -> MdnsService {
         match mode {
             DnsServiceMode::Commissionable(mode) => {
                 let discriminator = 0xFFu16.to_string(); // TODO
                 let mode = mode.to_string();
+                let vp = {
+                    let mut vp = heapless::String::<11>::new();
+                    write!(&mut vp, "{}+{}", device_info.vendor_id, device_info.product_id).unwrap();
+                    vp
+                };
                 let txt_values = [
                     ["D", &discriminator],
                     ["CM", mode.as_str()],
+                    ["DN", "Test Device"],
+                    ["VP", vp.as_str()],
+                    ["PI", ""]
                     // ...
                 ];
 
@@ -66,7 +77,7 @@ impl MdnsService {
     fn new(name: &str, service: &str, protocol: &str, port: u16, txt_values: &[[&str; 2]]) -> Self {
         let txts = txt_values
             .iter()
-            .map(|kv| format!("{}={}", kv[0], kv[2]))
+            .map(|kv| format!("{}={}", kv[0], kv[1]))
             .collect::<Vec<_>>();
         let txt = txts.iter().map(|v| v.as_str()).collect::<Vec<_>>();
 

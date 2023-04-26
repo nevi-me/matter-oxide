@@ -135,6 +135,18 @@ impl Handler for GeneralCommissioningCluster {
     }
 }
 
+/*
+If we assume a property that clients are stateless, we could generate a client
+that has no data, and then use it to interact with the server.
+*/
+pub struct GeneralCommissioningClient;
+
+impl GeneralCommissioningClient {
+    pub fn arm_fail_safe() {}
+    pub fn set_regulatory_config() {}
+    pub fn commissioning_complete() {}
+}
+
 #[repr(u16)]
 #[derive(FromPrimitive)]
 pub enum Attributes {
