@@ -6,7 +6,6 @@ use matter_controller::{
         device_type::root_node::DEVICE_TYPE_ROOT_NODE,
         endpoint::root_endpoint,
     },
-    transport::SocketAddress,
 };
 
 #[tokio::main(flavor = "multi_thread")]
@@ -39,7 +38,7 @@ async fn main() {
         .unwrap();
     matter_controller::controller::commission_with_pin(
         &mut controller,
-        SocketAddress::from_std(&remote_address),
+        remote_address,
         250,
         123456,
     )

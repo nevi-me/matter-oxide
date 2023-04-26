@@ -502,19 +502,13 @@ impl PBKDFParamRequest {
                         initiator_session_id = Some(value);
                     }
                 }
-                TagControl::ContextSpecific(3) => {
-                    match element.get_value() {
-                        TagLengthValue::Unsigned8(value) => {
-                            passcode_id = Some(value as _)
-                        }
-                        TagLengthValue::Unsigned16(value) => {
-                            passcode_id = Some(value as _)
-                        }
-                        _ => {
-                            panic!("Unexpected type for passcode_id")
-                        }
+                TagControl::ContextSpecific(3) => match element.get_value() {
+                    TagLengthValue::Unsigned8(value) => passcode_id = Some(value as _),
+                    TagLengthValue::Unsigned16(value) => passcode_id = Some(value as _),
+                    _ => {
+                        panic!("Unexpected type for passcode_id")
                     }
-                }
+                },
                 TagControl::ContextSpecific(4) => {
                     if let TagLengthValue::Boolean(value) = element.get_value() {
                         has_pbkdf_params = Some(value);

@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    net::SocketAddr,
     sync::Arc,
 };
 
@@ -31,7 +30,7 @@ use crate::{
         SecureChannelProtocolCode, SecureChannelProtocolID, SecureSessionContext, SessionContext,
         SessionManager,
     },
-    transport::{udp::UdpInterface, SocketAddress},
+    transport::{udp::UdpInterface, SocketAddr},
 };
 
 pub type TlvAnyData = heapless::Vec<u8, 1024>;
@@ -43,7 +42,7 @@ pub struct Controller<'a, H> {
     pase_session_ids: HashSet<u16>,
     exchange_manager: ExchangeManager,
     // session_manager: SessionManager,
-    message_sender: Sender<(Message, SocketAddress)>,
+    message_sender: Sender<(Message, SocketAddr)>,
     udp: UdpInterface,
     // TODO: This should probably be in the exchange manager
     message_store: Arc<RwLock<HashMap<(u16, SessionType), Message>>>,
@@ -56,9 +55,8 @@ impl<'a, H> Controller<'a, H> {
         to the exchange, and then polls at its level, sending messages appropriately?
         That isolates running the loop in one place, here.
          */
-        let (sender, receiver) = tokio::sync::mpsc::channel::<(Message, SocketAddress)>(32);
-        let local_address: std::net::SocketAddr = "0.0.0.0:5541".parse().unwrap();
-        let local_address = SocketAddress::from_std(&local_address);
+        let (sender, receiver) = tokio::sync::mpsc::channel::<(Message, SocketAddr)>(32);
+        let local_address: SocketAddr = "0.0.0.0:5541".parse().unwrap();
         let udp = UdpInterface::new(local_address).await;
         // Temporary
         udp.socket()
@@ -82,7 +80,7 @@ impl<'a, H> Controller<'a, H> {
         controller
     }
 
-    pub async fn start(&self, receiver: Receiver<(Message, SocketAddress)>) -> JoinHandle<()> {
+    pub async fn start(&self, receiver: Receiver<(Message, SocketAddr)>) -> JoinHandle<()> {
         let recv_socket = self.udp.socket();
         let message_store = self.message_store.clone();
 
@@ -128,7 +126,7 @@ impl<'a, H> Controller<'a, H> {
     /// the remote node until the process is completed or fails
     pub async fn commission_with_pin(
         &mut self,
-        remote_address: SocketAddress,
+        remote_address: SocketAddr,
         discriminator: u8,
         pin: u32,
     ) {
@@ -263,7 +261,7 @@ impl<'a, H> Controller<'a, H> {
     }
 
     /// Send a message, encrypting it if required
-    async fn send_message(&mut self, mut message: Message, peer: SocketAddress) {
+    async fn send_message(&mut self, mut message: Message, peer: SocketAddr) {
         // let session_context = self
         //     .exchange_manager
         //     .session_context(message.message_header.session_id);
@@ -284,7 +282,7 @@ pub type CommissioningController<'a> = Controller<'a, root_endpoint::RootEndpoin
 
 pub async fn commission_with_pin<'a>(
     controller: &mut CommissioningController<'a>,
-    remote_address: SocketAddress,
+    remote_address: SocketAddr,
     discriminator: u8,
     pin: u32,
 ) -> () {

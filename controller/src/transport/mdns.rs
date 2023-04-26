@@ -29,14 +29,23 @@ pub struct MdnsHandler {
 }
 
 impl MdnsHandler {
-    pub fn publish_service(name: &str, mode: DnsServiceMode, device_info: &DeviceInformation) -> MdnsService {
+    pub fn publish_service(
+        name: &str,
+        mode: DnsServiceMode,
+        device_info: &DeviceInformation,
+    ) -> MdnsService {
         match mode {
             DnsServiceMode::Commissionable(mode) => {
                 let discriminator = 0xFFu16.to_string(); // TODO
                 let mode = mode.to_string();
                 let vp = {
                     let mut vp = heapless::String::<11>::new();
-                    write!(&mut vp, "{}+{}", device_info.vendor_id, device_info.product_id).unwrap();
+                    write!(
+                        &mut vp,
+                        "{}+{}",
+                        device_info.vendor_id, device_info.product_id
+                    )
+                    .unwrap();
                     vp
                 };
                 let txt_values = [
@@ -44,8 +53,7 @@ impl MdnsHandler {
                     ["CM", mode.as_str()],
                     ["DN", "Test Device"],
                     ["VP", vp.as_str()],
-                    ["PI", ""]
-                    // ...
+                    ["PI", ""], // ...
                 ];
 
                 MdnsService::new(name, "_matterc", "_udp", DNS_MATTER_PORT, &txt_values)

@@ -13,11 +13,11 @@ use smol::net::UdpSocket;
 #[cfg(feature = "std-tokio")]
 use tokio::net::UdpSocket;
 
-use super::SocketAddress;
+use super::SocketAddr;
 
 #[derive(Clone)]
 pub struct UdpListener {
-    local_address: SocketAddress,
+    local_address: SocketAddr,
     // We should be able to use different implementations with feature-gates, so we might have to abstract
     socket: Arc<UdpSocket>,
 }
@@ -27,16 +27,16 @@ impl UdpListener {
     /// Create a new UDP client bound to a local address.
     /// The common behaviour for a server is to bind to a specific port, while a client would request any port.
     /// To request any port, specify `0.0.0.0:0` for IPv4 or `[::]:0` for IPv6.
-    pub async fn new(local_address: SocketAddress) -> Self {
-        let socket = Arc::new(UdpSocket::bind(local_address.to_std()).await.unwrap());
+    pub async fn new(local_address: SocketAddr) -> Self {
+        let socket = Arc::new(UdpSocket::bind(local_address).await.unwrap());
 
         Self {
-            local_address: SocketAddress::from_std(&socket.local_addr().unwrap()),
+            local_address: socket.local_addr().unwrap(),
             socket,
         }
     }
 
-    pub fn local_address(&self) -> &SocketAddress {
+    pub fn local_address(&self) -> &SocketAddr {
         &self.local_address
     }
 }
@@ -67,19 +67,19 @@ pub struct UdpInterface {
 
 impl UdpInterface {
     /// Create a new instance and connect to a remote address
-    pub async fn new(local_address: SocketAddress) -> Self {
+    pub async fn new(local_address: SocketAddr) -> Self {
         let listener = UdpListener::new(local_address).await;
 
         Self { listener }
     }
     /// Send a message to the remote address that we've connected to
-    pub async fn send_to(&self, msg: &[u8], remote_address: SocketAddress) -> usize {
+    pub async fn send_to(&self, msg: &[u8], remote_address: SocketAddr) -> usize {
         println!("Sending to {remote_address:?}");
         let len = self
             .listener
             .socket
             // .send(msg)
-            .send_to(msg, remote_address.to_std())
+            .send_to(msg, remote_address)
             .await
             .unwrap();
         println!("Sent message with len {len}");
@@ -92,7 +92,7 @@ impl UdpInterface {
         self.listener.socket.clone()
     }
 
-    pub fn local_address(&self) -> &SocketAddress {
+    pub fn local_address(&self) -> &SocketAddr {
         &self.listener.local_address
     }
 }

@@ -16,11 +16,11 @@ use tokio::{
     net::{TcpSocket, TcpStream},
 };
 
-use super::SocketAddress;
+use super::SocketAddr;
 
 #[derive(Clone)]
 pub struct TcpListener {
-    local_address: SocketAddress,
+    local_address: SocketAddr,
     // We should be able to use different implementations with feature-gates, so we might have to abstract
     socket: Arc<TcpSocket>,
 }
@@ -30,22 +30,22 @@ impl TcpListener {
     /// Create a new UDP client bound to a local address.
     /// The common behaviour for a server is to bind to a specific port, while a client would request any port.
     /// To request any port, specify `0.0.0.0:0` for IPv4 or `[::]:0` for IPv6.
-    pub async fn new(local_address: SocketAddress) -> Self {
+    pub async fn new(local_address: SocketAddr) -> Self {
         let socket = match local_address {
-            SocketAddress::V4(_) => TcpSocket::new_v4().unwrap(),
-            SocketAddress::V6(_) => TcpSocket::new_v6().unwrap(),
+            SocketAddr::V4(_) => TcpSocket::new_v4().unwrap(),
+            SocketAddr::V6(_) => TcpSocket::new_v6().unwrap(),
         };
         socket.set_reuseaddr(true).unwrap();
-        socket.bind(local_address.to_std()).unwrap();
+        socket.bind(local_address).unwrap();
         let socket = Arc::new(socket);
 
         Self {
-            local_address: SocketAddress::from_std(&socket.local_addr().unwrap()),
+            local_address: socket.local_addr().unwrap(),
             socket,
         }
     }
 
-    pub fn local_address(&self) -> &SocketAddress {
+    pub fn local_address(&self) -> &SocketAddr {
         &self.local_address
     }
 }
@@ -76,14 +76,14 @@ pub struct TcpInterface {
 
 impl TcpInterface {
     /// Create a new instance and connect to a remote address
-    pub async fn new(local_address: SocketAddress) -> Self {
+    pub async fn new(local_address: SocketAddr) -> Self {
         let listener = TcpListener::new(local_address).await;
 
         Self { listener }
     }
     /// Send a message to the remote address that we've connected to
-    pub async fn send_to(&self, msg: &[u8], remote_address: SocketAddress) -> usize {
-        let mut stream = TcpStream::connect(remote_address.to_std()).await.unwrap();
+    pub async fn send_to(&self, msg: &[u8], remote_address: SocketAddr) -> usize {
+        let mut stream = TcpStream::connect(remote_address).await.unwrap();
         let msg_len = msg.len();
         stream.write_all(msg).await.unwrap();
         msg_len
@@ -95,7 +95,7 @@ impl TcpInterface {
         self.listener.socket.clone()
     }
 
-    pub fn local_address(&self) -> &SocketAddress {
+    pub fn local_address(&self) -> &SocketAddr {
         &self.listener.local_address
     }
 }

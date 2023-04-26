@@ -9,7 +9,7 @@ use crate::{
     exchange::ExchangeManager,
     message::Message,
     secure_channel::SecureChannelManager,
-    transport::{udp::UdpInterface, Packet, SocketAddress},
+    transport::{udp::UdpInterface, Packet, SocketAddr},
 };
 
 pub struct EndDevice<'a, DEVICE> {

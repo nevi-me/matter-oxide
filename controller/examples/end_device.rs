@@ -11,7 +11,7 @@ use matter_controller::{
     transport::{
         mdns::{DnsServiceMode, MdnsHandler},
         udp::UdpInterface,
-        Packet, SocketAddress,
+        Packet,
     },
 };
 use num::FromPrimitive;
@@ -76,7 +76,7 @@ async fn main() {
       A message comes in, we should determine if an exchange exists for it,
       else create one.
     */
-    let udp = UdpInterface::new(SocketAddress::from_std(&local_address)).await;
+    let udp = UdpInterface::new(local_address).await;
     let socket = udp.socket();
     // TODO: Temp
     // socket
@@ -86,7 +86,11 @@ async fn main() {
     // Publish mDNS service
     let mut i = 0;
     while i < 3 {
-        MdnsHandler::publish_service("304763D1FA4BA463", DnsServiceMode::Commissionable(1), &device_info);
+        MdnsHandler::publish_service(
+            "304763D1FA4BA463",
+            DnsServiceMode::Commissionable(1),
+            &device_info,
+        );
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         i += 1;
     }
@@ -96,7 +100,7 @@ async fn main() {
         while let Some(message) = message_receiver.recv_ref().await {
             println!("Received message from channel buffer, sending to peer");
             // Send the message to destination
-            let address = message.recipient.as_ref().unwrap().to_std();
+            let address = message.recipient.as_ref().unwrap();
             dbg!(&address);
             send_socket
                 // .send(message.bytes.to_vec().as_slice())
@@ -136,7 +140,7 @@ async fn main() {
                         // Send a message by writing it directly to the channel buffer
                         let mut sender = end_device.message_sender.send_ref().await.unwrap();
                         dbg!(&peer);
-                        sender.recipient = Some(SocketAddress::from_std(&peer));
+                        sender.recipient = Some(peer);
                         response_message.encode(&mut sender.bytes, None);
                     }
                     println!("Sent message to channel buffer");
