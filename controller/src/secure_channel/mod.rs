@@ -1,9 +1,15 @@
 use num::FromPrimitive;
 
 use crate::{
-    message::{Message, ProtocolID},
+    crypto::fill_random,
+    message::{
+        status_report::StatusReport, ExchangeFlags, Message, MessageFlags, ProtocolID,
+        SecurityFlags,
+    },
     secure_channel::pake::{PBKDFParamRequest, PBKDFParams, Pake1, Pake3},
-    session_context::{SecureChannelProtocolID, SecureSessionContext, UnsecuredSessionContext},
+    session_context::{
+        SecureChannelProtocolID, SecureSessionContext, SessionContext, UnsecuredSessionContext,
+    },
 };
 
 use self::{case::CASEManager, pake::PASEManager};
@@ -12,7 +18,8 @@ pub mod case;
 pub mod pake;
 pub mod unsecured;
 
-pub const MSG_COUNTER_WINDOW_SIZE: usize = 32;
+/// The message counter maximum window size
+pub const MSG_COUNTER_WINDOW_SIZE: u32 = 32;
 pub const MSG_COUNTER_SYNC_REQ_JITTER: usize = 500;
 pub const MSG_COUNTER_SYNC_TIMEOUT: usize = 400;
 
@@ -39,9 +46,9 @@ impl SecureChannelManager {
     /// though. We might have to merge UnsecuredSessionContext with SecureSessionContext.
     pub fn on_message(
         &mut self,
-        session_context: &mut UnsecuredSessionContext,
+        session_context: &mut SessionContext,
         message: &Message,
-    ) -> (Message, Option<SecureSessionContext>) {
+    ) -> (Option<Message>, Option<SecureSessionContext>) {
         let payload_header = message.payload_header.as_ref().unwrap();
         assert_eq!(payload_header.protocol_id, ProtocolID::SecureChannel as u16);
         let opcode: SecureChannelProtocolID =
@@ -49,10 +56,15 @@ impl SecureChannelManager {
         // TODO: validate that the correct stage of session establishment is being used.
         match opcode {
             SecureChannelProtocolID::PBKDFParamRequest => {
+                let SessionContext::Unsecured(session_context) = session_context else {
+                    panic!();
+                };
+                let mut node_id = [0; 8];
+                fill_random(&mut node_id);
+                let node_id = u64::from_le_bytes(node_id);
                 // TODO: validate whether a new PASE session can be created
                 let passcode = 123456;
-                let session_id = 0;
-                let exchange_id = 0;
+                // This gets set at a different layer
                 let message_counter = 0;
                 // TODO: these should be known beforehand
                 let params = Some(PBKDFParams {
@@ -61,8 +73,14 @@ impl SecureChannelManager {
                 });
                 let mut pase = PASEManager::responder(
                     passcode,
-                    session_id,
-                    exchange_id,
+                    message.message_header.session_id,
+                    message.message_header.session_id,
+                    payload_header.exchange_id,
+                    node_id,
+                    message
+                        .message_header
+                        .source_node_id
+                        .expect("Should be present"),
                     message_counter,
                     params,
                 );
@@ -72,10 +90,12 @@ impl SecureChannelManager {
                 );
                 self.pase = Some(pase);
                 return (
-                    self.pase
-                        .as_mut()
-                        .unwrap()
-                        .pbkdf_param_response(session_context, &request),
+                    Some(
+                        self.pase
+                            .as_mut()
+                            .unwrap()
+                            .pbkdf_param_response(session_context, &request),
+                    ),
                     None,
                 );
             }
@@ -83,11 +103,14 @@ impl SecureChannelManager {
             SecureChannelProtocolID::PASEPake1 => {
                 // TODO: send acks
                 let request = Pake1::from_tlv(&message.payload);
-                return (self.pase.as_mut().unwrap().pake2(&request), None);
+                return (Some(self.pase.as_mut().unwrap().pake2(&request)), None);
             }
             SecureChannelProtocolID::PASEPake2 => todo!(),
             SecureChannelProtocolID::PASEPake3 => {
                 let request = Pake3::from_tlv(&message.payload);
+                let SessionContext::Unsecured(session_context) = session_context else {
+                    panic!();
+                };
 
                 // Create a secure session
                 let (k_e, c_a, c_b) = self.pase.as_ref().unwrap().get_secrets();
@@ -101,19 +124,31 @@ impl SecureChannelManager {
                 );
 
                 return (
-                    self.pase.as_mut().unwrap().pake_finished(&request),
+                    Some(self.pase.as_mut().unwrap().pake_finished(&request)),
                     Some(secured_session),
                 );
             }
-            SecureChannelProtocolID::MRPStandaloneAck => todo!(),
+            SecureChannelProtocolID::MRPStandaloneAck => {
+                // TODO: update for standard ack
+                (None, None)
+            }
             SecureChannelProtocolID::MsgCounterSyncReq => todo!(),
             SecureChannelProtocolID::MsgCounterSyncRsp => todo!(),
             SecureChannelProtocolID::CASESigma1 => todo!(),
             SecureChannelProtocolID::CASESigma2 => todo!(),
             SecureChannelProtocolID::CASESigma3 => todo!(),
             SecureChannelProtocolID::CASESigma2Resume => todo!(),
-            SecureChannelProtocolID::StatusReport => todo!(),
+            SecureChannelProtocolID::StatusReport => {
+                /*
+                Receiving a status report at a random stage of interaction is going to be interesting,
+                because without explicitly tracking state, we might not know
+                if for example a PASE interaction has failed.
+                 */
+                // TODO: handle when tracking state per channel
+                let status_report = StatusReport::from_payload(&message.payload);
+                dbg!(status_report);
+                (None, None)
+            }
         }
-        todo!()
     }
 }

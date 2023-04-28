@@ -51,24 +51,34 @@ pub struct Message {
 
 impl Message {
     /// Create a message for a standalone acknowledgement (4.11.7.1)
-    pub fn standalone_ack(ack: u32) -> Self {
+    pub fn standalone_ack(&self, ack: u32, message_counter: u32) -> Self {
+        let message_header = &self.message_header;
+        let payload_header = self.payload_header.as_ref().unwrap();
+        // It appears as though we never send acks for group messages.
+        // If so, it's safe to get our Node ID from the incoming destination.
+        // It would be ideal to enforce this outside here so that this doesn't
+        // return Result<Self> in future.
+        // TODO: we have used a default source node ID of 1, review it
+        let Some(NodeID::Unique(source_node_id)) = message_header.dest_node_id else {
+            panic!("Trying to create an ack for a group message");
+        };
         Self {
             message_header: MessageHeader {
-                session_type: todo!(),
-                message_flags: todo!(),
-                session_id: todo!(),
-                security_flags: todo!(),
-                message_counter: todo!(),
-                source_node_id: todo!(),
-                dest_node_id: todo!(),
+                session_type: message_header.session_type.clone(),
+                message_flags: message_header.message_flags.clone(),
+                session_id: message_header.session_id,
+                security_flags: message_header.security_flags.clone(),
+                message_counter,
+                source_node_id: Some(source_node_id),
+                dest_node_id: message_header.source_node_id.map(|v| NodeID::Unique(v)),
                 message_extensions: (),
             },
             payload_header: Some(ProtocolHeader {
                 exchange_flags: ExchangeFlags::ACKNOWLDEGE,
                 protocol_opcode: SecureChannelProtocolID::MRPStandaloneAck as _,
-                exchange_id: todo!(),
+                exchange_id: payload_header.exchange_id,
                 protocol_id: ProtocolID::SecureChannel as _,
-                protocol_vendor_id: todo!(),
+                protocol_vendor_id: payload_header.protocol_vendor_id,
                 ack_message_counter: Some(ack),
                 secured_extensions: (),
             }),
@@ -79,16 +89,13 @@ impl Message {
     pub fn decode(mut buf: &[u8]) -> Self {
         // Perform validity checks
         let message_flags = MessageFlags::from_bits(buf.get_u8()).unwrap();
-        // dbg!(message_flags);
         if (message_flags & MessageFlags::FORMAT_INVALID).bits() > 0 {
             panic!("Invalid version")
         }
 
         let session_id = buf.get_u16_le();
-        // dbg!(session_id);
 
         let security_flags = SecurityFlags::from_bits(buf.get_u8()).unwrap();
-        // dbg!(security_flags);
         if security_flags.contains(SecurityFlags::SESSION_UNICAST)
             && message_flags.contains(MessageFlags::DSIZ_16_BIT_GROUP_ID)
         {
@@ -97,11 +104,10 @@ impl Message {
         // TODO 1.c
         // 2. If message is not of unsecured session type
         let session_type = SessionType::new(security_flags, session_id);
-        // dbg!(&session_type);
 
         // Message counter
         let message_counter = buf.get_u32_le();
-        // dbg!(message_counter);
+        println!("Received message counter {message_counter}");
 
         // Source and destination node ID
         let source_node_id = if message_flags.contains(MessageFlags::SOURCE_NODE_ID_PRESENT) {
@@ -109,7 +115,6 @@ impl Message {
         } else {
             None
         };
-        // dbg!(source_node_id);
 
         let dest_node_id = if message_flags.contains(MessageFlags::DSIZ_64_BIT_NODE_ID) {
             Some(NodeID::Unique(buf.get_u64_le()))
@@ -120,7 +125,6 @@ impl Message {
         } else {
             None
         };
-        // dbg!(dest_node_id);
 
         // Message extensions (4.4.1.8)
         if security_flags.contains(SecurityFlags::MESSAGE_EXT) {
@@ -150,11 +154,9 @@ impl Message {
         // Protocol Header Field Descriptions (4.4.3)
         let mut buf = BytesMut::from(&self.payload[..]);
         let flag = buf.get_u8() & 0b00011111;
-        // println!("{:08b} {flag}", flag);
         let exchange_flags = ExchangeFlags::from_bits(flag).unwrap();
-        // dbg!(exchange_flags);
         let protocol_opcode = buf.get_u8();
-        // dbg!(protocol_opcode); // TODO: convert to an enum
+        // TODO: convert to an enum
         let exchange_id = buf.get_u16_le();
         let protocol_id = buf.get_u16_le();
         let protocol_vendor_id = if exchange_flags.contains(ExchangeFlags::VENDOR) {
@@ -383,6 +385,8 @@ pub enum ProtocolID {
 
 #[cfg(test)]
 mod tests {
+    use crate::secure_channel::pake::PBKDFParamResponse;
+
     use super::*;
 
     #[test]
@@ -409,5 +413,42 @@ mod tests {
         let buf = hex_literal::hex!("00010000ebed3e005cf46a92ce31fbf54a3fb90eef5a8f5549250c84df73619aba1e45648d966af5f8bd9be8aee5b3d660fe2acce629bc73874437");
         let message = Message::decode(&buf);
         dbg!(message);
+    }
+
+    #[test]
+    fn test_decode_4() {
+        let buf = [
+            1, 0, 0, 0, 180, 192, 173, 4, 55, 174, 246, 40, 208, 192, 13, 220, 6, 33, 62, 165, 0,
+            0, 156, 161, 209, 15, 21, 48, 1, 32, 11, 116, 4, 96, 40, 54, 152, 207, 32, 71, 68, 236,
+            115, 49, 45, 39, 19, 79, 250, 108, 211, 155, 179, 89, 240, 228, 65, 28, 113, 205, 225,
+            128, 48, 2, 32, 172, 149, 1, 215, 38, 235, 38, 92, 125, 187, 158, 180, 231, 57, 1, 44,
+            39, 17, 141, 105, 118, 236, 63, 38, 210, 231, 0, 207, 202, 237, 22, 60, 36, 3, 1, 53,
+            4, 37, 1, 208, 7, 48, 2, 32, 128, 26, 160, 178, 229, 241, 62, 22, 85, 225, 181, 35,
+            129, 225, 147, 31, 234, 13, 93, 71, 143, 97, 235, 17, 249, 114, 189, 255, 134, 153, 29,
+            72, 24, 24,
+        ];
+        let mut message = Message::decode(&buf);
+        message.decrypt(None);
+        let payload = PBKDFParamResponse::from_tlv(&message.payload.as_slice());
+        dbg!(message);
+        dbg!(payload);
+    }
+
+    #[test]
+    fn test_decode_5() {
+        let buf = [
+            4, 0, 0, 0, 204, 191, 106, 129, 170, 39, 53, 81, 253, 164, 132, 155, 6, 33, 236, 129,
+            0, 0, 16, 249, 209, 10, 21, 48, 1, 32, 175, 81, 136, 43, 233, 1, 175, 72, 115, 17, 103,
+            51, 190, 81, 6, 71, 5, 168, 197, 144, 117, 145, 51, 161, 250, 228, 184, 203, 219, 68,
+            165, 26, 48, 2, 32, 195, 191, 106, 129, 221, 165, 184, 92, 98, 106, 88, 47, 218, 248,
+            85, 203, 112, 133, 238, 48, 140, 137, 118, 149, 69, 68, 175, 232, 20, 204, 161, 163,
+            37, 3, 0, 0, 53, 4, 38, 1, 232, 3, 0, 0, 48, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 56, 4, 24,
+        ];
+        let mut message = Message::decode(&buf);
+        message.decrypt(None);
+        let payload = PBKDFParamResponse::from_tlv(&message.payload.as_slice());
+        dbg!(message);
+        dbg!(payload);
     }
 }

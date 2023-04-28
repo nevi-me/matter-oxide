@@ -35,6 +35,8 @@ pub struct PASEManager {
     initiator_session_id: u16,
     responder_session_id: u16,
     exchange_id: u16,
+    node_id: u64,
+    peer_node_id: u64,
     message_counter: u32,
     // Some internal storage
     c_a: [u8; CRYPTO_HASH_LEN_BYTES],
@@ -48,6 +50,7 @@ impl PASEManager {
         session_id: u16,
         exchange_id: u16,
         message_counter: u32,
+        node_id: u64,
     ) -> Self {
         Self {
             passcode,
@@ -55,6 +58,8 @@ impl PASEManager {
             initiator_session_id: session_id,
             responder_session_id: 0,
             exchange_id,
+            node_id,
+            peer_node_id: 0, // unknown at this point
             message_counter,
             pbkdf_param_request: Default::default(),
             pbkdf_param_response: Default::default(),
@@ -67,16 +72,22 @@ impl PASEManager {
 
     pub fn responder(
         passcode: u32,
+        initiator_session_id: u16,
         session_id: u16,
         exchange_id: u16,
+        node_id: u64,
+        peer_node_id: u64,
         message_counter: u32,
         pbkdf_params: Option<PBKDFParams>,
     ) -> Self {
         Self {
             passcode,
             spake2p: None,
-            initiator_session_id: 0,
+            // TODO: aren't these going to be the same values?
+            initiator_session_id,
             exchange_id,
+            node_id,
+            peer_node_id,
             message_counter,
             responder_session_id: session_id,
             pbkdf_param_request: heapless::Vec::new(),
@@ -164,12 +175,11 @@ impl PASEManager {
         self.pbkdf_param_response = heapless::Vec::from_slice(encoded.to_slice()).unwrap();
 
         // DRY: Payload header
-        let mut payload_header = ProtocolHeader::default();
-        payload_header.exchange_id = self.exchange_id;
+        let mut payload_header = ProtocolHeader {
+            exchange_id: self.exchange_id,
+            ..Default::default()
+        };
         // Secure channel by default
-        payload_header
-            .exchange_flags
-            .set(ExchangeFlags::INITIATOR, true);
         payload_header
             .exchange_flags
             .set(ExchangeFlags::RELIABILITY, true);
@@ -240,8 +250,6 @@ impl PASEManager {
         let mut c_b = [0; CRYPTO_HASH_LEN_BYTES];
         s2p.compute_key_schedule(&context, &mut k_e, &mut c_a, &mut c_b);
 
-        // dbg!((&k_e, &c_a, &c_b));
-
         let pake2 = Pake2 {
             p_b: s2p.our_key_share().try_into().unwrap(),
             c_b,
@@ -286,8 +294,6 @@ impl PASEManager {
         let s2p = self.spake2p.as_mut().unwrap();
         s2p.compute_peer_key_share(&request.p_b);
         s2p.compute_key_schedule(&context, &mut k_e, &mut c_a, &mut c_b);
-
-        // dbg!((&k_e, &c_a, &c_b));
 
         // Verify Pake2.cB against cB
         assert_eq!(c_b, request.c_b);
@@ -371,9 +377,14 @@ impl PASEManager {
         self.message_counter += 1;
         message_header
             .message_flags
-            .set(MessageFlags::SOURCE_NODE_ID_PRESENT, true);
+            .set(MessageFlags::SOURCE_NODE_ID_PRESENT, false);
+        // message_header.source_node_id = Some(self.node_id);
+        message_header
+            .message_flags
+            .set(MessageFlags::DSIZ_64_BIT_NODE_ID, true);
         // TODO: ephemeral node ID?
-        message_header.source_node_id = Some(1000);
+        message_header.dest_node_id = Some(NodeID::Unique(self.peer_node_id));
+        // message_header.dest_node_id = None;
         // TODO: use a builder that validates the rules
         message_header
             .security_flags
@@ -586,11 +597,12 @@ impl PBKDFParamResponse {
                 TagControl::ContextSpecific(2),
                 TagLengthValue::ByteString(heapless::Vec::from_slice(&params.salt).unwrap()),
             );
-            encoder.write(
-                TlvType::EndOfContainer,
-                TagControl::ContextSpecific(4),
-                TagLengthValue::EndOfContainer,
-            );
+            // TODO: The C++ implementation rejects this as invalid.
+            // encoder.write(
+            //     TlvType::EndOfContainer,
+            //     TagControl::ContextSpecific(4),
+            //     TagLengthValue::EndOfContainer,
+            // );
         }
         // TODO: sleepy vafiables
         encoder.write(

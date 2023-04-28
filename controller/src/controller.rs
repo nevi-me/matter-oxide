@@ -1,3 +1,4 @@
+use core::cell::RefCell;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -40,8 +41,8 @@ pub struct Controller<'a, H> {
     device: Device<'a, H>,
     last_node_id: i64,
     pase_session_ids: HashSet<u16>,
-    exchange_manager: ExchangeManager,
-    // session_manager: SessionManager,
+    // TODO: Requires a different strategy for no_std
+    exchange_manager: Arc<RwLock<ExchangeManager>>,
     message_sender: Sender<(Message, SocketAddr)>,
     udp: UdpInterface,
     // TODO: This should probably be in the exchange manager
@@ -64,12 +65,12 @@ impl<'a, H> Controller<'a, H> {
             .await
             .unwrap();
         let device = Device::new(node, handler);
-        let controller = Controller {
+        let mut controller = Controller {
             fabric: (),
             device,
             last_node_id: 0,
             pase_session_ids: HashSet::with_capacity(32),
-            exchange_manager: ExchangeManager::new(),
+            exchange_manager: Arc::new(RwLock::new(ExchangeManager::new())),
             message_sender: sender,
             udp,
             message_store: Arc::new(RwLock::new(HashMap::with_capacity(64))),
@@ -99,6 +100,7 @@ impl<'a, H> Controller<'a, H> {
         });
 
         // Spawn a task to receive messages and process them
+        let exchange_manager = self.exchange_manager.clone();
         tokio::spawn(async move {
             loop {
                 // TODO: reset and reuse
@@ -107,9 +109,7 @@ impl<'a, H> Controller<'a, H> {
                 // Decode the message but not decrypt it
                 // println!("Received from {peer} {}", hex::encode(&buf[..len]));
                 let mut message = Message::decode(&buf[..len]);
-                // self.exchange_manager.receive_message(&mut message);
-                // TODO don't decrypt here, using it to test
-                message.decrypt(None);
+                exchange_manager.write().await.receive_message(&mut message);
                 let key = (
                     message.message_header.session_id,
                     message.message_header.session_type,
@@ -117,9 +117,11 @@ impl<'a, H> Controller<'a, H> {
                 let mut writer = message_store.write().await;
                 writer.insert(key, message);
                 drop(writer);
-                // tokio::time::sleep(std::time::Duration::from_millis(50)).await
             }
         })
+
+        // Use a channel to pass packets between the exchange manager and
+        // spawned tasks. This is to avoid using a mutable lock (Mutex et al).
     }
 
     /// Commission a device with a PIN, creating a new session and interacting with
@@ -141,17 +143,27 @@ impl<'a, H> Controller<'a, H> {
         fill_random(&mut message_counter);
         let message_counter = u32::from_le_bytes(message_counter);
 
+        let mut node_id = [0; 8];
+        fill_random(&mut node_id);
+        let node_id = u64::from_le_bytes(node_id);
+
         let session_type = SessionType::UnsecuredSession;
-        let (exchange_id, session_id) = self.exchange_manager.new_initiator_exchange_unsecured();
+        let (exchange_id, session_id) = self
+            .exchange_manager
+            .write()
+            .await
+            .new_initiator_exchange_unsecured();
         let mut pake_interaction =
-            PASEManager::initiator(pin, session_id, exchange_id, message_counter);
+            PASEManager::initiator(pin, session_id, exchange_id, message_counter, node_id);
 
         // Send param request
         let request_message = {
-            let session = self
-                .exchange_manager
-                .unsecured_session_context_mut(session_id);
-            pake_interaction.pbkdf_param_request(session)
+            let mut writer = self.exchange_manager.write().await;
+            let session = writer.session_context_mut(session_id);
+            match session {
+                SessionContext::Unsecured(session) => pake_interaction.pbkdf_param_request(session),
+                _ => todo!(),
+            }
         };
         self.send_message(request_message, remote_address.clone())
             .await;
@@ -163,10 +175,12 @@ impl<'a, H> Controller<'a, H> {
             heapless::Vec::from_slice(response_message.payload.as_slice()).unwrap(),
         );
         let mut pake1_message = {
-            let session = self
-                .exchange_manager
-                .unsecured_session_context_mut(session_id);
-            pake_interaction.pake1(session)
+            let mut writer = self.exchange_manager.write().await;
+            let session = writer.session_context_mut(session_id);
+            match session {
+                SessionContext::Unsecured(session) => pake_interaction.pake1(session),
+                _ => todo!(),
+            }
         };
         // Acknowledge previous response
         pake1_message.with_ack(next_ack);
@@ -209,6 +223,8 @@ impl<'a, H> Controller<'a, H> {
 
         // Add session to session manager
         self.exchange_manager
+            .write()
+            .await
             .add_session(SessionContext::Secure(secured_session));
 
         /*
@@ -247,7 +263,8 @@ impl<'a, H> Controller<'a, H> {
                 // Decrypt the message if it is secure
                 match session_type {
                     SessionType::SecureUnicast(_) | SessionType::SecureGroup(_) => {
-                        let SessionContext::Secure(session) = self.exchange_manager.session_context(session_id) else {
+                        let mut writer = self.exchange_manager.write().await;
+                        let SessionContext::Secure(session) = writer.session_context(session_id) else {
                             panic!("Session in context not a SecureSession");
                         };
                         message.decrypt(Some(&session.decryption_key));
@@ -295,19 +312,27 @@ pub async fn commission_with_pin<'a>(
     fill_random(&mut message_counter);
     let message_counter = u32::from_le_bytes(message_counter);
 
+    let mut node_id = [0; 8];
+    fill_random(&mut node_id);
+    let node_id = u64::from_le_bytes(node_id);
+
     let session_type = SessionType::UnsecuredSession;
     let (exchange_id, session_id) = controller
         .exchange_manager
+        .write()
+        .await
         .new_initiator_exchange_unsecured();
     let mut pake_interaction =
-        PASEManager::initiator(pin, session_id, exchange_id, message_counter);
+        PASEManager::initiator(pin, session_id, exchange_id, message_counter, node_id);
 
     // Send param request
     let request_message = {
-        let session = controller
-            .exchange_manager
-            .unsecured_session_context_mut(session_id);
-        pake_interaction.pbkdf_param_request(session)
+        let mut writer = controller.exchange_manager.write().await;
+        let session = writer.session_context_mut(session_id);
+        match session {
+            SessionContext::Unsecured(session) => pake_interaction.pbkdf_param_request(session),
+            _ => todo!(),
+        }
     };
     controller
         .send_message(request_message, remote_address.clone())
@@ -320,10 +345,12 @@ pub async fn commission_with_pin<'a>(
         heapless::Vec::from_slice(response_message.payload.as_slice()).unwrap(),
     );
     let mut pake1_message = {
-        let session = controller
-            .exchange_manager
-            .unsecured_session_context_mut(session_id);
-        pake_interaction.pake1(session)
+        let mut writer = controller.exchange_manager.write().await;
+        let session = writer.session_context_mut(session_id);
+        match session {
+            SessionContext::Unsecured(session) => pake_interaction.pake1(session),
+            _ => todo!(),
+        }
     };
     // Acknowledge previous response
     pake1_message.with_ack(next_ack);
@@ -369,6 +396,8 @@ pub async fn commission_with_pin<'a>(
     // Add session to session manager
     controller
         .exchange_manager
+        .write()
+        .await
         .add_session(SessionContext::Secure(secured_session));
 
     /*

@@ -7,6 +7,7 @@ use matter_controller::{
         endpoint::{extended_color_light_endpoint, root_endpoint},
     },
     end_device::EndDevice,
+    exchange::ExchangeMessageAction,
     message::{Message, ProtocolID},
     transport::{
         mdns::{DnsServiceMode, MdnsHandler},
@@ -84,26 +85,27 @@ async fn main() {
     //     .await
     //     .unwrap();
     // Publish mDNS service
-    let mut i = 0;
-    while i < 3 {
-        MdnsHandler::publish_service(
-            "304763D1FA4BA463",
-            DnsServiceMode::Commissionable(1),
-            &device_info,
-        );
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        i += 1;
-    }
+    let mdns_future = tokio::task::spawn(async move {
+        let mut i = 0;
+        while i < 5 {
+            MdnsHandler::publish_service(
+                "304763D1FA4BA463",
+                DnsServiceMode::Commissionable(1),
+                &device_info,
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            i += 1;
+        }
+    });
     let send_socket = udp.socket();
     let send_future = tokio::task::spawn(async move {
         let mut bytes = BytesMut::with_capacity(1024);
         while let Some(message) = message_receiver.recv_ref().await {
             println!("Received message from channel buffer, sending to peer");
+            println!("Sending message: {:?}", message.bytes.to_vec());
             // Send the message to destination
             let address = message.recipient.as_ref().unwrap();
-            dbg!(&address);
             send_socket
-                // .send(message.bytes.to_vec().as_slice())
                 .send_to(message.bytes.to_vec().as_slice(), address)
                 .await
                 .unwrap();
@@ -117,18 +119,67 @@ async fn main() {
             let mut message = Message::decode(&buf[..len]);
             // The message could be encrypted, it could be a new exchange etc.
             // Send it to the exchange manager to take action on it
-            end_device.exchange_manager.receive_message(&mut message);
+            let action = end_device.exchange_manager.receive_message(&mut message);
+            dbg!(&action);
+            match action {
+                ExchangeMessageAction::Drop => {
+                    // Ignore message
+                    println!(
+                        "Ignoring duplicate message {}",
+                        message.message_header.message_counter
+                    );
+                    continue;
+                }
+                ExchangeMessageAction::AckAndDrop => {
+                    if let Some(ack) = message.next_ack() {
+                        let exchange_id = message.payload_header.as_ref().unwrap().exchange_id;
+                        let next_message_counter = {
+                            let exchange = end_device.exchange_manager.find_exchange(exchange_id);
+                            exchange.next_message_counter()
+                        };
+                        let ack_message = message.standalone_ack(ack, next_message_counter);
+                        {
+                            // Send a message by writing it directly to the channel buffer
+                            let mut sender = end_device.message_sender.send_ref().await.unwrap();
+                            sender.recipient = Some(peer);
+                            ack_message.encode(&mut sender.bytes, None);
+                        }
+                    }
+                }
+                ExchangeMessageAction::Process => {}
+            }
             let payload_header = message.payload_header.as_ref().unwrap();
             let protocol_id: ProtocolID = ProtocolID::from_u16(payload_header.protocol_id).unwrap();
+            let next_ack = message.next_ack();
+            // TODO: update our ack counter
+            let exchange_id = payload_header.exchange_id;
+            let next_message_counter = {
+                if exchange_id == 0 {
+                    111111
+                } else {
+                    let exchange = end_device.exchange_manager.find_exchange(exchange_id);
+                    exchange.next_message_counter()
+                }
+            };
             match protocol_id {
                 ProtocolID::SecureChannel => {
+                    dbg!((&message.message_header, &payload_header));
                     // Send the message to the secure channel manager
                     let session_context = end_device
                         .exchange_manager
-                        .unsecured_session_context_mut(message.message_header.session_id);
+                        .session_context_mut(message.message_header.session_id);
                     let (response_message, maybe_session) = end_device
                         .secure_channel
                         .on_message(session_context, &message);
+
+                    // If no message, don't do anything further
+                    let Some(mut response_message) = response_message else {
+                        continue;
+                    };
+
+                    // Add acknowledgement
+                    response_message.with_ack(next_ack);
+                    response_message.message_header.message_counter = next_message_counter;
 
                     if let Some(session) = maybe_session {
                         end_device.exchange_manager.add_session(
@@ -139,7 +190,6 @@ async fn main() {
                     {
                         // Send a message by writing it directly to the channel buffer
                         let mut sender = end_device.message_sender.send_ref().await.unwrap();
-                        dbg!(&peer);
                         sender.recipient = Some(peer);
                         response_message.encode(&mut sender.bytes, None);
                     }
@@ -174,7 +224,7 @@ async fn main() {
         }
     });
     // TODO: add a third task that terminates the 2 tasks
-    let (send, recv) = tokio::join!(send_future, recv_future);
+    let (send, recv, _) = tokio::join!(send_future, recv_future, mdns_future);
     send.unwrap();
     recv.unwrap();
 }

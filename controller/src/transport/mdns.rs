@@ -53,6 +53,8 @@ impl MdnsHandler {
                     ["CM", mode.as_str()],
                     ["DN", "Test Device"],
                     ["VP", vp.as_str()],
+                    ["SII", "10000"],
+                    ["SAI", "500"],
                     ["PI", ""], // ...
                 ];
 

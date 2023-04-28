@@ -2,6 +2,7 @@ use bytes::{Buf, BufMut};
 use num::FromPrimitive;
 
 /// Status Report Message (Appendix D)
+#[derive(Debug)]
 pub struct StatusReport {
     pub general_code: GeneralCode,
     pub protocol_id: u32,
