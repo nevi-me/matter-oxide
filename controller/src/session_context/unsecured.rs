@@ -2,6 +2,7 @@
 
 use super::SessionRole;
 
+#[derive(Debug)]
 pub struct UnsecuredSessionContext {
     pub session_role: SessionRole,
     pub local_session_id: u16,

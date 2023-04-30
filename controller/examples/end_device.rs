@@ -56,8 +56,8 @@ async fn main() {
     let (message_sender, message_receiver) = MESSAGE_CHANNEL.split();
     let mut end_device = EndDevice::new(&node, device_handler, message_sender.clone()).await;
 
-    // let local_address: std::net::SocketAddr = "192.168.86.197:5540".parse().unwrap();
-    let local_address: std::net::SocketAddr = "[::]:5540".parse().unwrap();
+    // let local_address: std::net::SocketAddr = "192.168.86.197:5541".parse().unwrap();
+    let local_address: std::net::SocketAddr = "[::]:5541".parse().unwrap();
 
     /*
     The above is async, so we can spawn separate tasks for
@@ -70,7 +70,7 @@ async fn main() {
      */
 
     /*
-    The device listens on port 5540. What happens when a message comes in?
+    The device listens on port 5541. What happens when a message comes in?
 
     Say the device is a lighbulb, how will the lights be turned on and off?
     - Let's see with general commissioning as a start.
@@ -114,8 +114,10 @@ async fn main() {
     });
     let recv_future = tokio::task::spawn(async move {
         loop {
+            // TODO: use a buffer that we can allocate once
             let mut buf = [0u8; 1024];
             let (len, peer) = socket.recv_from(&mut buf).await.unwrap();
+            println!("Received message {:?}", &buf[..len]);
             let mut message = Message::decode(&buf[..len]);
             // The message could be encrypted, it could be a new exchange etc.
             // Send it to the exchange manager to take action on it

@@ -28,8 +28,8 @@ use crate::{
     message::{Message, SessionType},
     secure_channel::pake::{PASEManager, Pake2},
     session_context::{
-        SecureChannelProtocolCode, SecureChannelProtocolID, SecureSessionContext, SessionContext,
-        SessionManager,
+        SecureChannelProtocolCode, SecureChannelProtocolOpCode, SecureSessionContext,
+        SessionContext, SessionManager,
     },
     transport::{udp::UdpInterface, SocketAddr},
 };
@@ -61,7 +61,7 @@ impl<'a, H> Controller<'a, H> {
         let udp = UdpInterface::new(local_address).await;
         // Temporary
         udp.socket()
-            .connect("127.0.0.1:5540".parse::<SocketAddr>().unwrap())
+            .connect("127.0.0.1:5541".parse::<SocketAddr>().unwrap())
             .await
             .unwrap();
         let device = Device::new(node, handler);
@@ -201,7 +201,7 @@ impl<'a, H> Controller<'a, H> {
         let payload_header = pake_finished_message.payload_header.as_ref().unwrap();
         assert_eq!(
             payload_header.protocol_opcode,
-            SecureChannelProtocolID::StatusReport as u8
+            SecureChannelProtocolOpCode::StatusReport as u8
         );
         let status_report = StatusReport::from_payload(&pake_finished_message.payload);
         assert_eq!(status_report.general_code, GeneralCode::Success);
@@ -264,7 +264,7 @@ impl<'a, H> Controller<'a, H> {
                 match session_type {
                     SessionType::SecureUnicast(_) | SessionType::SecureGroup(_) => {
                         let mut writer = self.exchange_manager.write().await;
-                        let SessionContext::Secure(session) = writer.session_context(session_id) else {
+                        let SessionContext::Secure(session) = writer.session_context(session_id).unwrap() else {
                             panic!("Session in context not a SecureSession");
                         };
                         message.decrypt(Some(&session.decryption_key));
@@ -373,7 +373,7 @@ pub async fn commission_with_pin<'a>(
     let payload_header = pake_finished_message.payload_header.as_ref().unwrap();
     assert_eq!(
         payload_header.protocol_opcode,
-        SecureChannelProtocolID::StatusReport as u8
+        SecureChannelProtocolOpCode::StatusReport as u8
     );
     let status_report = StatusReport::from_payload(&pake_finished_message.payload);
     assert_eq!(status_report.general_code, GeneralCode::Success);

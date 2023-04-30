@@ -3,7 +3,7 @@ use crate::{
     crypto::{fill_random, pbkdf2_hmac, sha256 as crypto_sha256, spake2p::Spake2P},
     message::{status_report::StatusReport, *},
     session_context::{
-        SecureChannelProtocolCode, SecureChannelProtocolID, SecureSessionContext, SessionRole,
+        SecureChannelProtocolCode, SecureChannelProtocolOpCode, SecureSessionContext, SessionRole,
         UnsecuredSessionContext,
     },
     tlv::*,
@@ -122,7 +122,7 @@ impl PASEManager {
         payload_header
             .exchange_flags
             .set(ExchangeFlags::RELIABILITY, true);
-        payload_header.protocol_opcode = SecureChannelProtocolID::PBKDFParamRequest as _;
+        payload_header.protocol_opcode = SecureChannelProtocolOpCode::PBKDFParamRequest as _;
 
         let pbkdf_param_request = PBKDFParamRequest {
             initiator_random,
@@ -134,12 +134,7 @@ impl PASEManager {
         // Encode the request struct
         let encoded = pbkdf_param_request.to_tlv();
         self.pbkdf_param_request = heapless::Vec::from_slice(encoded.to_slice()).unwrap();
-        Message {
-            message_header: self.message_header(),
-            payload_header: Some(payload_header),
-            payload: encoded.inner(),
-            integrity_check: None,
-        }
+        Message::new(self.message_header(), Some(payload_header), encoded.inner())
     }
 
     pub fn pbkdf_param_response(
@@ -183,14 +178,9 @@ impl PASEManager {
         payload_header
             .exchange_flags
             .set(ExchangeFlags::RELIABILITY, true);
-        payload_header.protocol_opcode = SecureChannelProtocolID::PBKDFParamResponse as _;
+        payload_header.protocol_opcode = SecureChannelProtocolOpCode::PBKDFParamResponse as _;
 
-        Message {
-            message_header: self.message_header(),
-            payload_header: Some(payload_header),
-            payload: encoded.inner(),
-            integrity_check: None,
-        }
+        Message::new(self.message_header(), Some(payload_header), encoded.inner())
     }
 
     pub fn pake1(&mut self, session_context: &mut UnsecuredSessionContext) -> Message {
@@ -222,14 +212,9 @@ impl PASEManager {
         payload_header
             .exchange_flags
             .set(ExchangeFlags::RELIABILITY, true);
-        payload_header.protocol_opcode = SecureChannelProtocolID::PASEPake1 as _;
+        payload_header.protocol_opcode = SecureChannelProtocolOpCode::PASEPake1 as _;
 
-        Message {
-            message_header: self.message_header(),
-            payload_header: Some(payload_header),
-            payload: encoded.inner(),
-            integrity_check: None,
-        }
+        Message::new(self.message_header(), Some(payload_header), encoded.inner())
     }
     pub fn pake2(&mut self, request: &Pake1) -> Message {
         let PBKDFParams { iterations, salt } = self.pbkdf_params.as_ref().unwrap();
@@ -269,14 +254,9 @@ impl PASEManager {
         payload_header
             .exchange_flags
             .set(ExchangeFlags::RELIABILITY, true);
-        payload_header.protocol_opcode = SecureChannelProtocolID::PASEPake2 as _;
+        payload_header.protocol_opcode = SecureChannelProtocolOpCode::PASEPake2 as _;
 
-        Message {
-            message_header: self.message_header(),
-            payload_header: Some(payload_header),
-            payload: encoded.inner(),
-            integrity_check: None,
-        }
+        Message::new(self.message_header(), Some(payload_header), encoded.inner())
     }
     pub fn pake3(&mut self, request: &Pake2) -> Message {
         // TODO: can provide these to spake2p to avoid repetition
@@ -308,7 +288,7 @@ impl PASEManager {
         payload_header
             .exchange_flags
             .set(ExchangeFlags::RELIABILITY, true);
-        payload_header.protocol_opcode = SecureChannelProtocolID::PASEPake3 as _;
+        payload_header.protocol_opcode = SecureChannelProtocolOpCode::PASEPake3 as _;
 
         let pake3 = Pake3 { c_a };
         let encoded = pake3.to_tlv();
@@ -318,12 +298,7 @@ impl PASEManager {
         self.c_b = c_b;
         self.k_e = k_e;
 
-        Message {
-            message_header: self.message_header(),
-            payload_header: Some(payload_header),
-            payload: encoded.inner(),
-            integrity_check: None,
-        }
+        Message::new(self.message_header(), Some(payload_header), encoded.inner())
     }
     pub fn pake_finished(&mut self, pake3: &Pake3) -> Message {
         // Verify Pake3.cA against cA
@@ -338,8 +313,8 @@ impl PASEManager {
         // Secure channel by default
         payload_header
             .exchange_flags
-            .set(ExchangeFlags::RELIABILITY, true);
-        payload_header.protocol_opcode = SecureChannelProtocolID::StatusReport as _;
+            .set(ExchangeFlags::RELIABILITY, false);
+        payload_header.protocol_opcode = SecureChannelProtocolOpCode::StatusReport as _;
         let status_report = StatusReport {
             general_code: status_report::GeneralCode::Success,
             // TODO: there's a mismatch here, we're going from u16 to u32
@@ -353,13 +328,8 @@ impl PASEManager {
         status_report.to_payload(&mut payload);
         let payload = heapless::Vec::from_slice(&payload).unwrap();
 
-        Message {
-            // TODO: is header different?
-            message_header: self.message_header(),
-            payload_header: Some(payload_header),
-            payload,
-            integrity_check: None,
-        }
+        // TODO: is header different?
+        Message::new(self.message_header(), Some(payload_header), payload)
     }
     pub fn set_pbkdf_param_request(&mut self, value: heapless::Vec<u8, 512>) {
         self.pbkdf_param_request = value;
@@ -598,11 +568,11 @@ impl PBKDFParamResponse {
                 TagLengthValue::ByteString(heapless::Vec::from_slice(&params.salt).unwrap()),
             );
             // TODO: The C++ implementation rejects this as invalid.
-            // encoder.write(
-            //     TlvType::EndOfContainer,
-            //     TagControl::ContextSpecific(4),
-            //     TagLengthValue::EndOfContainer,
-            // );
+            encoder.write(
+                TlvType::EndOfContainer,
+                TagControl::ContextSpecific(3),
+                TagLengthValue::EndOfContainer,
+            );
         }
         // TODO: sleepy vafiables
         encoder.write(

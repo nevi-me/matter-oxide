@@ -26,7 +26,7 @@ use transport::udp::UdpInterface;
 use crate::{
     crypto::fill_random,
     message::status_report::{GeneralCode, StatusReport},
-    session_context::{SecureChannelProtocolID, SecureSessionContext},
+    session_context::{SecureChannelProtocolOpCode, SecureSessionContext},
 };
 
 #[macro_use]

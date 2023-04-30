@@ -73,6 +73,6 @@ mod tests {
             endpoint::{extended_color_light_endpoint, root_endpoint},
         },
         message::ProtocolID,
-        session_context::SecureChannelProtocolID,
+        session_context::SecureChannelProtocolOpCode,
     };
 }

@@ -8,6 +8,7 @@ use super::SessionRole;
 
 // TODO: find a more appropriate place for this
 /// Session Context (4.12.2.1)
+#[derive(Debug)]
 pub struct SecureSessionContext {
     pub session_type: SecureSessionType,
     pub session_role: SessionRole,
@@ -76,6 +77,7 @@ impl SecureSessionContext {
     }
 }
 
+#[derive(Debug)]
 pub enum SecureSessionType {
     Case,
     Pase,
@@ -83,7 +85,7 @@ pub enum SecureSessionType {
 
 #[repr(u8)]
 #[derive(FromPrimitive)]
-pub enum SecureChannelProtocolID {
+pub enum SecureChannelProtocolOpCode {
     MsgCounterSyncReq = 0x00,
     MsgCounterSyncRsp = 0x01,
     MRPStandaloneAck = 0x10,

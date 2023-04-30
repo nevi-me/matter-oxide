@@ -12,7 +12,7 @@ use crate::cluster::utility::basic_information::DeviceInformation;
 pub const MDNS_BROADCAST_IPV4: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251); // "224.0.0.251"
 pub const MDNS_BROADCAST_IPV6: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0x00FA); // "ff02::fb"
 pub const MDNS_BROADCAST_PORT: u16 = 5353;
-pub const DNS_MATTER_PORT: u16 = 5540;
+pub const DNS_MATTER_PORT: u16 = 5541;
 
 static RESPONDER: Lazy<Mutex<Responder>> = Lazy::new(|| {
     Mutex::new(

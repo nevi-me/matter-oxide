@@ -16,23 +16,13 @@ impl CASEManager {
         // Generate destination ID
         // Generate ephemeral keypair
         // May encode MRP params
-        Message {
-            message_header: MessageHeader::default(),
-            payload_header: None,
-            payload: heapless::Vec::new(),
-            integrity_check: None,
-        }
+        Message::default()
     }
     pub fn sigma1_with_resumption(&mut self) -> Message {
         // Same as above
         // Generate s1rk
         // Generate initiator reume NIC using shared secret
-        Message {
-            message_header: MessageHeader::default(),
-            payload_header: None,
-            payload: heapless::Vec::new(),
-            integrity_check: None,
-        }
+        Message::default()
     }
     pub fn sigma2(&mut self, request: &Sigma1) -> Message {
         // Check if resumption id and initiator resume NIC are both set or both not
@@ -40,36 +30,16 @@ impl CASEManager {
         // Search for existing session if resumtion fields present
         // Validate sigma1 destination ID
 
-        Message {
-            message_header: MessageHeader::default(),
-            payload_header: None,
-            payload: heapless::Vec::new(),
-            integrity_check: None,
-        }
+        Message::default()
     }
     pub fn sigma2_resume(&mut self) -> Message {
-        Message {
-            message_header: MessageHeader::default(),
-            payload_header: None,
-            payload: heapless::Vec::new(),
-            integrity_check: None,
-        }
+        Message::default()
     }
     pub fn sigma3(&mut self) -> Message {
-        Message {
-            message_header: MessageHeader::default(),
-            payload_header: None,
-            payload: heapless::Vec::new(),
-            integrity_check: None,
-        }
+        Message::default()
     }
     pub fn sigma_finished(&mut self) -> Message {
-        Message {
-            message_header: MessageHeader::default(),
-            payload_header: None,
-            payload: heapless::Vec::new(),
-            integrity_check: None,
-        }
+        Message::default()
     }
 }
 

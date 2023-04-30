@@ -31,9 +31,9 @@ async fn main() {
     };
     let controller_handler = root_endpoint::handler(0, device_info);
     let mut controller = Controller::new(&node, controller_handler).await;
-    // let remote_address = "[::ffff:192.168.86.197]:5540"
-    let remote_address = "100.71.123.113:5540"
-        // let remote_address = "[fdf5:c816:9a31:0:14de:f8f3:b5aa:f677]:5540"
+    // let remote_address = "[::ffff:192.168.86.197]:5541"
+    let remote_address = "100.71.123.113:5541"
+        // let remote_address = "[fdf5:c816:9a31:0:14de:f8f3:b5aa:f677]:5541"
         .parse::<std::net::SocketAddr>()
         .unwrap();
     matter_controller::controller::commission_with_pin(

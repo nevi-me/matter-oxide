@@ -113,8 +113,8 @@ impl ExchangeManager {
         self.session_manager.add_session(session_context, false);
     }
 
-    pub fn session_context(&self, session_id: u16) -> &SessionContext {
-        &self.session_manager.get_session(session_id)
+    pub fn session_context(&self, session_id: u16) -> Option<&SessionContext> {
+        self.session_manager.get_session(session_id)
     }
 
     pub fn session_context_mut(&mut self, session_id: SessionID) -> &mut SessionContext {
@@ -136,8 +136,8 @@ impl ExchangeManager {
         if !header.message_flags.contains(MessageFlags::FORMAT_V1) {
             panic!("Invalid format");
         }
-        let session_id = match &header.session_type {
-            SessionType::UnsecuredSession => None,
+        match &header.session_type {
+            SessionType::UnsecuredSession => {}
             SessionType::SecureUnicast(session_id) => {
                 if header
                     .message_flags
@@ -145,7 +145,6 @@ impl ExchangeManager {
                 {
                     panic!("Can't have a group ID for a unicast message");
                 }
-                Some(session_id)
             }
             SessionType::SecureGroup(session_id) => {
                 // TODO: DSIZ shouldn't be 0 for neither group nor session
@@ -155,21 +154,32 @@ impl ExchangeManager {
                 {
                     panic!("Source Node ID should be present");
                 }
-                Some(session_id)
             }
         };
+        let session_id = message.message_header.session_id;
+        dbg!(self.session_manager.get_session(session_id));
         // TODO: There can be > 1 key for group messages
-        if let Some(session_id) = session_id {
-            let SessionContext::Secure(session) = self.session_manager.get_session(*session_id) else {
-                unreachable!();
-            };
-            if header.security_flags.contains(SecurityFlags::PRIVACY) {
-                // TODO: privacy processing
+        match self.session_manager.get_session(session_id) {
+            Some(SessionContext::MCSP) => todo!("MCSP sessions not supported"),
+            Some(SessionContext::Secure(session)) => {
+                if header.security_flags.contains(SecurityFlags::PRIVACY) {
+                    // TODO: privacy processing
+                }
+                message.decrypt(Some(&session.decryption_key[..]));
             }
-            message.decrypt(Some(&session.decryption_key[..]));
-        } else {
-            message.decrypt(None);
+            Some(SessionContext::Unsecured(_)) | None => {
+                message.decrypt(None);
+            }
         }
+
+        // if let Some(session_id) = session_id {
+        //     let SessionContext::Secure(session) = self.session_manager.get_session(*session_id) else {
+        //         unreachable!();
+        //     };
+
+        //     message.decrypt(Some(&session.decryption_key[..]));
+        // } else {
+        // }
         // TODO: update session timestamps
 
         // Message can now be processed by the next layer

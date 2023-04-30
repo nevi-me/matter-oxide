@@ -59,9 +59,8 @@ impl SessionManager {
         panic!()
     }
 
-    pub fn get_session(&self, id: SessionID) -> &SessionContext {
-        dbg!(id);
-        self.sessions.get(&id).unwrap()
+    pub fn get_session(&self, id: SessionID) -> Option<&SessionContext> {
+        self.sessions.get(&id)
     }
 
     pub fn get_session_mut(&mut self, id: SessionID) -> &mut SessionContext {
@@ -81,6 +80,7 @@ impl SessionManager {
     }
 }
 
+#[derive(Debug)]
 pub enum SessionContext {
     MCSP,
     Secure(SecureSessionContext),

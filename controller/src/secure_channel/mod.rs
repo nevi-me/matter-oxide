@@ -8,7 +8,7 @@ use crate::{
     },
     secure_channel::pake::{PBKDFParamRequest, PBKDFParams, Pake1, Pake3},
     session_context::{
-        SecureChannelProtocolID, SecureSessionContext, SessionContext, UnsecuredSessionContext,
+        SecureChannelProtocolOpCode, SecureSessionContext, SessionContext, UnsecuredSessionContext,
     },
 };
 
@@ -51,11 +51,11 @@ impl SecureChannelManager {
     ) -> (Option<Message>, Option<SecureSessionContext>) {
         let payload_header = message.payload_header.as_ref().unwrap();
         assert_eq!(payload_header.protocol_id, ProtocolID::SecureChannel as u16);
-        let opcode: SecureChannelProtocolID =
-            SecureChannelProtocolID::from_u8(payload_header.protocol_opcode).unwrap();
+        let opcode: SecureChannelProtocolOpCode =
+            SecureChannelProtocolOpCode::from_u8(payload_header.protocol_opcode).unwrap();
         // TODO: validate that the correct stage of session establishment is being used.
         match opcode {
-            SecureChannelProtocolID::PBKDFParamRequest => {
+            SecureChannelProtocolOpCode::PBKDFParamRequest => {
                 let SessionContext::Unsecured(session_context) = session_context else {
                     panic!();
                 };
@@ -99,14 +99,14 @@ impl SecureChannelManager {
                     None,
                 );
             }
-            SecureChannelProtocolID::PBKDFParamResponse => todo!(),
-            SecureChannelProtocolID::PASEPake1 => {
+            SecureChannelProtocolOpCode::PBKDFParamResponse => todo!(),
+            SecureChannelProtocolOpCode::PASEPake1 => {
                 // TODO: send acks
                 let request = Pake1::from_tlv(&message.payload);
                 return (Some(self.pase.as_mut().unwrap().pake2(&request)), None);
             }
-            SecureChannelProtocolID::PASEPake2 => todo!(),
-            SecureChannelProtocolID::PASEPake3 => {
+            SecureChannelProtocolOpCode::PASEPake2 => todo!(),
+            SecureChannelProtocolOpCode::PASEPake3 => {
                 let request = Pake3::from_tlv(&message.payload);
                 let SessionContext::Unsecured(session_context) = session_context else {
                     panic!();
@@ -128,17 +128,17 @@ impl SecureChannelManager {
                     Some(secured_session),
                 );
             }
-            SecureChannelProtocolID::MRPStandaloneAck => {
+            SecureChannelProtocolOpCode::MRPStandaloneAck => {
                 // TODO: update for standard ack
                 (None, None)
             }
-            SecureChannelProtocolID::MsgCounterSyncReq => todo!(),
-            SecureChannelProtocolID::MsgCounterSyncRsp => todo!(),
-            SecureChannelProtocolID::CASESigma1 => todo!(),
-            SecureChannelProtocolID::CASESigma2 => todo!(),
-            SecureChannelProtocolID::CASESigma3 => todo!(),
-            SecureChannelProtocolID::CASESigma2Resume => todo!(),
-            SecureChannelProtocolID::StatusReport => {
+            SecureChannelProtocolOpCode::MsgCounterSyncReq => todo!(),
+            SecureChannelProtocolOpCode::MsgCounterSyncRsp => todo!(),
+            SecureChannelProtocolOpCode::CASESigma1 => todo!(),
+            SecureChannelProtocolOpCode::CASESigma2 => todo!(),
+            SecureChannelProtocolOpCode::CASESigma3 => todo!(),
+            SecureChannelProtocolOpCode::CASESigma2Resume => todo!(),
+            SecureChannelProtocolOpCode::StatusReport => {
                 /*
                 Receiving a status report at a random stage of interaction is going to be interesting,
                 because without explicitly tracking state, we might not know

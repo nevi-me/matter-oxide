@@ -2,7 +2,11 @@ use bitflags::bitflags;
 // TODO: ideal to use a version of buf that doesn't panic
 use bytes::{Buf, BufMut, BytesMut};
 
-use crate::{crypto::encrypt_in_place, session_context::SecureChannelProtocolID};
+use crate::{
+    constants::{CRYPTO_AEAD_MIC_LENGTH_BYTES, CRYPTO_AEAD_NONCE_LENGTH_BYTES},
+    crypto::{decrypt_in_place, encrypt_in_place},
+    session_context::SecureChannelProtocolOpCode,
+};
 
 pub mod status_report;
 
@@ -41,7 +45,7 @@ pub type SessionID = u16;
 /// - vr Application Payload [opt]
 enum X {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Message {
     pub message_header: MessageHeader,
     pub payload_header: Option<ProtocolHeader>,
@@ -50,6 +54,20 @@ pub struct Message {
 }
 
 impl Message {
+    /// Create a new message from its parts
+    pub fn new(
+        message_header: MessageHeader,
+        payload_header: Option<ProtocolHeader>,
+        payload: heapless::Vec<u8, 1024>,
+    ) -> Self {
+        Self {
+            message_header,
+            payload_header,
+            payload,
+            integrity_check: None,
+        }
+    }
+
     /// Create a message for a standalone acknowledgement (4.11.7.1)
     pub fn standalone_ack(&self, ack: u32, message_counter: u32) -> Self {
         let message_header = &self.message_header;
@@ -75,7 +93,7 @@ impl Message {
             },
             payload_header: Some(ProtocolHeader {
                 exchange_flags: ExchangeFlags::ACKNOWLDEGE,
-                protocol_opcode: SecureChannelProtocolID::MRPStandaloneAck as _,
+                protocol_opcode: SecureChannelProtocolOpCode::MRPStandaloneAck as _,
                 exchange_id: payload_header.exchange_id,
                 protocol_id: ProtocolID::SecureChannel as _,
                 protocol_vendor_id: payload_header.protocol_vendor_id,
@@ -147,11 +165,46 @@ impl Message {
             integrity_check: None,
         }
     }
-    pub fn encrypt(&mut self, encryption_key: &[u8]) {
-        todo!("Message encryption not yet supported")
-    }
     pub fn decrypt(&mut self, decryption_key: Option<&[u8]>) {
+        if let Some(decryption_key) = decryption_key {
+            // Unencrypted header
+            let mut aad: heapless::Vec<u8, 32> = heapless::Vec::new();
+            aad.push(self.message_header.message_flags.bits());
+            aad.extend(self.message_header.session_id.to_le_bytes());
+            aad.push(self.message_header.security_flags.bits());
+            aad.extend(self.message_header.message_counter.to_le_bytes());
+            if let Some(value) = self.message_header.source_node_id {
+                aad.extend(value.to_le_bytes());
+            }
+            if let Some(value) = self.message_header.dest_node_id {
+                match value {
+                    NodeID::Unique(value) => aad.extend(value.to_le_bytes()),
+                    NodeID::Group(value) => aad.extend(value.to_le_bytes()),
+                }
+            }
+            // TODO: append message extensions when supported
+
+            let mut nonce: heapless::Vec<u8, CRYPTO_AEAD_NONCE_LENGTH_BYTES> = heapless::Vec::new();
+            nonce.push(self.message_header.security_flags.bits());
+            nonce.extend(self.message_header.message_counter.to_le_bytes());
+            nonce.extend(
+                self.message_header
+                    .source_node_id
+                    .unwrap_or_default()
+                    .to_le_bytes(),
+            );
+            let mut payload = self.payload.as_mut();
+
+            let decrypted_len = decrypt_in_place(
+                decryption_key,
+                nonce.as_slice(),
+                aad.as_slice(),
+                &mut payload,
+            );
+            self.payload.resize(decrypted_len, 0);
+        }
         // Protocol Header Field Descriptions (4.4.3)
+        // Read past where the header was
         let mut buf = BytesMut::from(&self.payload[..]);
         let flag = buf.get_u8() & 0b00011111;
         let exchange_flags = ExchangeFlags::from_bits(flag).unwrap();
@@ -170,7 +223,7 @@ impl Message {
             None
         };
         if exchange_flags.contains(ExchangeFlags::SECURED_EXT) {
-            todo!("Secured extensions not yet implemented");
+            // todo!("Secured extensions not yet implemented");
         }
 
         self.payload_header = Some(ProtocolHeader {
@@ -188,12 +241,39 @@ impl Message {
 
     pub fn encode(&self, out: &mut BytesMut, encryption_key: Option<&[u8]>) {
         self.message_header.encode(out);
-        if let Some(_) = encryption_key {
-            encrypt_in_place()
-        }
-        // If there is an encryption key, encrypt the payload
+        let message_header_len = out.len();
         self.payload_header.as_ref().unwrap().encode(out);
         out.put_slice(&self.payload);
+        let payload_len = out.len() - message_header_len;
+
+        // Handle encryption if applicable
+        if let Some(encryption_key) = encryption_key {
+            let (message_header, mut payload) = out.split_at_mut(message_header_len);
+            let mut nonce: heapless::Vec<u8, CRYPTO_AEAD_NONCE_LENGTH_BYTES> = heapless::Vec::new();
+            nonce
+                .push(self.message_header.security_flags.bits())
+                .unwrap();
+            nonce.extend(self.message_header.message_counter.to_le_bytes());
+            // Default here makes sense for PASE messages as the Unspecified node ID
+            // is used (2.5.5.6)
+            nonce.extend(
+                self.message_header
+                    .source_node_id
+                    .unwrap_or_default()
+                    .to_le_bytes(),
+            );
+
+            // Cipher Text
+            let tag_space = [0u8; CRYPTO_AEAD_MIC_LENGTH_BYTES];
+            payload.put(&tag_space[..]);
+            encrypt_in_place(
+                encryption_key,
+                nonce.as_slice(),
+                message_header,
+                payload,
+                payload_len,
+            );
+        }
     }
 
     /// Add an acknowledgement to the message. Useful to add after consruction.
@@ -218,6 +298,8 @@ impl Message {
             None
         }
     }
+
+    fn encrypt_in_place(&mut self) {}
 }
 
 #[derive(Default, Debug, Clone)] // For testing only
@@ -385,7 +467,7 @@ pub enum ProtocolID {
 
 #[cfg(test)]
 mod tests {
-    use crate::secure_channel::pake::PBKDFParamResponse;
+    use crate::{message::status_report::StatusReport, secure_channel::pake::PBKDFParamResponse};
 
     use super::*;
 
@@ -437,18 +519,14 @@ mod tests {
     #[test]
     fn test_decode_5() {
         let buf = [
-            4, 0, 0, 0, 204, 191, 106, 129, 170, 39, 53, 81, 253, 164, 132, 155, 6, 33, 236, 129,
-            0, 0, 16, 249, 209, 10, 21, 48, 1, 32, 175, 81, 136, 43, 233, 1, 175, 72, 115, 17, 103,
-            51, 190, 81, 6, 71, 5, 168, 197, 144, 117, 145, 51, 161, 250, 228, 184, 203, 219, 68,
-            165, 26, 48, 2, 32, 195, 191, 106, 129, 221, 165, 184, 92, 98, 106, 88, 47, 218, 248,
-            85, 203, 112, 133, 238, 48, 140, 137, 118, 149, 69, 68, 175, 232, 20, 204, 161, 163,
-            37, 3, 0, 0, 53, 4, 38, 1, 232, 3, 0, 0, 48, 2, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 56, 4, 24,
+            4, 0, 0, 0, 11, 57, 253, 93, 0, 221, 54, 23, 63, 11, 59, 187, 3, 16, 19, 17, 0, 0, 198,
+            191, 106, 129,
         ];
         let mut message = Message::decode(&buf);
         message.decrypt(None);
-        let payload = PBKDFParamResponse::from_tlv(&message.payload.as_slice());
+        // message.decrypt(Some(&[
+        //     77, 78, 236, 186, 38, 33, 108, 189, 52, 74, 213, 94, 170, 213, 56, 123,
+        // ]));
         dbg!(message);
-        dbg!(payload);
     }
 }

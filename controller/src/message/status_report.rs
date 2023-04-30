@@ -13,6 +13,7 @@ pub struct StatusReport {
 impl StatusReport {
     pub fn from_payload(mut payload: &[u8]) -> Self {
         // TODO: do implementations send 6 bytes?
+        dbg!(payload.len());
         assert!(payload.len() >= 8);
 
         let general_code = payload.get_u16_le();
