@@ -3,9 +3,10 @@ use num::FromPrimitive;
 use crate::{
     cluster::{Cluster, ClusterClassification},
     data_model::{
-        handler::{AttrDetails, CmdDetails, Handler},
+        handler::{AttrDataEncoder, CmdDetails, Handler},
         Attribute, AttributeValue,
     },
+    interaction_model::{transaction::Transaction, AttributeDataIB, AttributePathIB},
     secure_channel::pake::PASEManager,
     session_context::SecureSessionContext,
     tlv::Encoder,
@@ -50,7 +51,7 @@ impl AdminCommissioningCluster {
         }
     }
 
-    pub fn read(&self, attr: AttrDetails, encoder: &mut Encoder) {
+    pub fn read(&self, attr: AttributePathIB, encoder: &mut Encoder) {
         todo!()
     }
 
@@ -93,17 +94,17 @@ impl AdminCommissioningCluster {
 }
 
 impl Handler for AdminCommissioningCluster {
-    fn handle_read(
-        &self,
-        attr: &AttrDetails,
-        encoder: crate::data_model::handler::AttrDataEncoder,
-    ) {
+    fn handle_read(&self, attr: &AttributePathIB, encoder: &mut AttrDataEncoder) {
         todo!()
+    }
+
+    fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
+        panic!("handle_read2 not implemented")
     }
 
     fn handle_write(
         &mut self,
-        _attr: &AttrDetails,
+        _attr: &AttributePathIB,
         _data: &crate::data_model::handler::TLVElement,
     ) {
         panic!("Attribute not found")
@@ -111,7 +112,7 @@ impl Handler for AdminCommissioningCluster {
 
     fn handle_invoke(
         &mut self,
-        _transaction: &mut crate::data_model::handler::Transaction,
+        _transaction: &mut Transaction,
         _cmd: &CmdDetails,
         _data: &crate::data_model::handler::TLVElement,
         _encoder: crate::data_model::handler::CmdDataEncoder,

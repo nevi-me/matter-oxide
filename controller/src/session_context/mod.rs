@@ -10,12 +10,14 @@ pub use unsecured::*;
 
 use crate::{crypto::fill_random, message::SessionID};
 
+#[derive(Debug)]
 pub struct SessionManager {
     // TODO: can I make this take only secure sessions?
     //       what about MCSP? Insecure is prob fine as I shouldn't have > 1
     sessions: HashMap<SessionID, SessionContext>,
-    last_session_id: SessionID,
+    pub last_session_id: SessionID,
     resumption_records: HashMap<u64, ()>, // u64 -> node ID
+    random: [u8; 8],
 }
 
 impl SessionManager {
@@ -25,6 +27,7 @@ impl SessionManager {
             sessions: HashMap::with_capacity(10),
             last_session_id: 0,
             resumption_records: HashMap::with_capacity(4),
+            random: rand::random(),
         }
     }
 
@@ -50,6 +53,16 @@ impl SessionManager {
                 unsecured.local_session_id
             }
         };
+        if self.sessions.contains_key(&session_id) {
+            let current_session = self.sessions.get(&session_id).unwrap();
+            match current_session {
+                SessionContext::MCSP => todo!(),
+                SessionContext::Secure(_) => {
+                    panic!("Unable to insert session {:?}", session_context);
+                }
+                SessionContext::Unsecured(_) => {}
+            }
+        }
         self.sessions.insert(session_id, session_context);
         session_id
     }
@@ -85,6 +98,16 @@ pub enum SessionContext {
     MCSP,
     Secure(SecureSessionContext),
     Unsecured(UnsecuredSessionContext),
+}
+
+impl SessionContext {
+    pub fn encryption_key(&self) -> Option<&[u8]> {
+        match self {
+            SessionContext::MCSP => None,
+            SessionContext::Secure(session) => Some(&session.encryption_key),
+            SessionContext::Unsecured(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

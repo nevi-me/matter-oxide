@@ -100,17 +100,23 @@ impl ExchangeManager {
             // session_timestamp: 0,
             // active_timestamp: 0,
         });
+        let exchange_id = self.new_responder_exchange(message);
         self.session_manager.add_session(session_context, false);
 
+        (exchange_id, session_id)
+    }
+
+    pub fn new_responder_exchange(&mut self, message: &Message) -> u16 {
         let exchange = Exchange::responder(message);
         let exchange_id = exchange.exchange_id;
         // TODO: we use the exchange ID from the intiator, this is unsafe
         self.exchanges.insert(exchange_id, exchange);
-        (exchange_id, session_id)
+        exchange_id
     }
 
     pub fn add_session(&mut self, session_context: SessionContext) {
         self.session_manager.add_session(session_context, false);
+        self.session_manager.last_session_id += 10;
     }
 
     pub fn session_context(&self, session_id: u16) -> Option<&SessionContext> {
@@ -157,7 +163,7 @@ impl ExchangeManager {
             }
         };
         let session_id = message.message_header.session_id;
-        dbg!(self.session_manager.get_session(session_id));
+        self.session_context(session_id);
         // TODO: There can be > 1 key for group messages
         match self.session_manager.get_session(session_id) {
             Some(SessionContext::MCSP) => todo!("MCSP sessions not supported"),
@@ -200,7 +206,7 @@ impl ExchangeManager {
 
         */
         let payload_header = message.payload_header.as_ref().unwrap();
-        dbg!((&message.message_header, payload_header));
+        // dbg!((&message.message_header, payload_header));
         let exchange = self.exchanges.get_mut(&payload_header.exchange_id);
         match exchange {
             Some(exchange) => {
@@ -224,8 +230,19 @@ impl ExchangeManager {
                 // TODO: Should not have a duplicate counter
                 // TODO: has to have a registered protocol ID
                 assert!(payload_header.protocol_id < 0x0005);
-
-                let (_exchange_id, _session_id) = self.new_responder_exchange_unsecured(message);
+                println!("Processing unsolicited message {:#?}", message);
+                // A session ID might already exist, find one first
+                // TODO: validate this before creating a new session (e.g. can't hijack existing session)
+                match self.session_context(message.message_header.session_id) {
+                    Some(_) => {
+                        // Create a new exchange with the session
+                        self.new_responder_exchange(message);
+                    }
+                    None => {
+                        let (_exchange_id, _session_id) =
+                            self.new_responder_exchange_unsecured(message);
+                    }
+                }
                 // TODO: depends on the above conditions
                 ExchangeMessageAction::Process
             }

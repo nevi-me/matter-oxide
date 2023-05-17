@@ -5,10 +5,16 @@ use matter_controller::{
         device::{Endpoint, Node},
         device_type::{root_node::DEVICE_TYPE_ROOT_NODE, DEVICE_TYPE_EXTENDED_COLOR_LIGHT},
         endpoint::{extended_color_light_endpoint, root_endpoint},
+        handler::{AttrDataEncoder, Handler},
     },
     end_device::EndDevice,
     exchange::ExchangeMessageAction,
+    interaction_model::{
+        transaction::Transaction, InteractionModelProtocolOpCode, ReadRequestMessage,
+        ReportDataMessage,
+    },
     message::{Message, ProtocolID},
+    tlv::Encoder,
     transport::{
         mdns::{DnsServiceMode, MdnsHandler},
         udp::UdpInterface,
@@ -48,11 +54,8 @@ async fn main() {
             },
         ],
     };
-    let device_handler = root_endpoint::handler(0, device_info.clone()).chain(
-        1,
-        0,
-        extended_color_light_endpoint::handler(1),
-    );
+    let device_info_clone = device_info.clone();
+    let device_handler = handler(&device_info_clone);
     let (message_sender, message_receiver) = MESSAGE_CHANNEL.split();
     let mut end_device = EndDevice::new(&node, device_handler, message_sender.clone()).await;
 
@@ -85,13 +88,14 @@ async fn main() {
     //     .await
     //     .unwrap();
     // Publish mDNS service
+    let device_info_clone = device_info.clone();
     let mdns_future = tokio::task::spawn(async move {
         let mut i = 0;
         while i < 5 {
             MdnsHandler::publish_service(
                 "304763D1FA4BA463",
                 DnsServiceMode::Commissionable(1),
-                &device_info,
+                &device_info_clone,
             );
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             i += 1;
@@ -117,12 +121,11 @@ async fn main() {
             // TODO: use a buffer that we can allocate once
             let mut buf = [0u8; 1024];
             let (len, peer) = socket.recv_from(&mut buf).await.unwrap();
-            println!("Received message {:?}", &buf[..len]);
+            // println!("Received message {:?}", &buf[..len]);
             let mut message = Message::decode(&buf[..len]);
             // The message could be encrypted, it could be a new exchange etc.
             // Send it to the exchange manager to take action on it
             let action = end_device.exchange_manager.receive_message(&mut message);
-            dbg!(&action);
             match action {
                 ExchangeMessageAction::Drop => {
                     // Ignore message
@@ -144,7 +147,12 @@ async fn main() {
                             // Send a message by writing it directly to the channel buffer
                             let mut sender = end_device.message_sender.send_ref().await.unwrap();
                             sender.recipient = Some(peer);
-                            ack_message.encode(&mut sender.bytes, None);
+                            let encryption_key = end_device
+                                .exchange_manager
+                                .session_context(message.message_header.session_id)
+                                .map(|s| s.encryption_key())
+                                .flatten();
+                            ack_message.encode(&mut sender.bytes, encryption_key);
                         }
                     }
                 }
@@ -165,7 +173,6 @@ async fn main() {
             };
             match protocol_id {
                 ProtocolID::SecureChannel => {
-                    dbg!((&message.message_header, &payload_header));
                     // Send the message to the secure channel manager
                     let session_context = end_device
                         .exchange_manager
@@ -183,35 +190,48 @@ async fn main() {
                     response_message.with_ack(next_ack);
                     response_message.message_header.message_counter = next_message_counter;
 
+                    {
+                        // Send a message by writing it directly to the channel buffer
+                        let mut sender = end_device.message_sender.send_ref().await.unwrap();
+                        sender.recipient = Some(peer);
+                        let encryption_key = maybe_session.as_ref().map(|s| &s.encryption_key[..]);
+
+                        response_message.encode(&mut sender.bytes, encryption_key);
+                    }
+
                     if let Some(session) = maybe_session {
                         end_device.exchange_manager.add_session(
                             matter_controller::session_context::SessionContext::Secure(session),
                         );
                     }
+                }
+                ProtocolID::InteractionModel => {
+                    // dbg!((&message.message_header, &payload_header));
+                    // The Matter common vendor ID
+                    // assert_eq!(payload_header.protocol_vendor_id, 0x0000);
+                    let session_context = end_device
+                        .exchange_manager
+                        .session_context_mut(message.message_header.session_id);
+                    let mut transaction = Transaction {};
+                    let response_message =
+                        transaction.on_message(session_context, &handler(&device_info), &message);
+
+                    // If no message, don't do anything further
+                    let Some(mut response_message) = response_message else {
+                        continue;
+                    };
+
+                    // Add acknowledgement
+                    response_message.with_ack(next_ack);
+                    response_message.message_header.message_counter = next_message_counter;
 
                     {
                         // Send a message by writing it directly to the channel buffer
                         let mut sender = end_device.message_sender.send_ref().await.unwrap();
                         sender.recipient = Some(peer);
-                        response_message.encode(&mut sender.bytes, None);
+                        let encryption_key = session_context.encryption_key();
+                        response_message.encode(&mut sender.bytes, encryption_key);
                     }
-                    println!("Sent message to channel buffer");
-                    // let opcode: SecureChannelProtocolID =
-                    //     SecureChannelProtocolID::from_u8(payload_header.protocol_opcode)
-                    //         .unwrap();
-                    // match opcode {
-                    //     SecureChannelProtocolID::MRPStandaloneAck => todo!(),
-                    //     SecureChannelProtocolID::MsgCounterSyncReq => todo!(),
-                    //     SecureChannelProtocolID::MsgCounterSyncRsp => todo!(),
-                    //     SecureChannelProtocolID::CASESigma1 => todo!(),
-                    //     SecureChannelProtocolID::CASESigma2 => todo!(),
-                    //     SecureChannelProtocolID::CASESigma3 => todo!(),
-                    //     SecureChannelProtocolID::CASESigma2Resume => todo!(),
-                    //     SecureChannelProtocolID::StatusReport => todo!(),
-                    // }
-                }
-                ProtocolID::InteractionModel => {
-                    todo!("Interaction Model")
                 }
                 ProtocolID::UserDirectedComm => {
                     todo!()
@@ -229,4 +249,12 @@ async fn main() {
     let (send, recv, _) = tokio::join!(send_future, recv_future, mdns_future);
     send.unwrap();
     recv.unwrap();
+}
+
+fn handler<'a>(device_info: &'a DeviceInformation<'a>) -> impl Handler + 'a {
+    root_endpoint::handler(0, device_info.clone()).chain(
+        1,
+        0,
+        extended_color_light_endpoint::handler(1),
+    )
 }

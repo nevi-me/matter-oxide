@@ -22,7 +22,7 @@ pub struct SecureSessionContext {
     // TODO: (4.5.4)
     pub message_reception_state: (),
     pub local_fabric_index: usize,
-    pub peer_node_id: i64,
+    pub peer_node_id: u64,
     pub resumption_id: i8, // TODO
     pub session_timestamp: i64,
     pub active_timestamp: i64,

@@ -91,6 +91,7 @@ impl<'a, H> Controller<'a, H> {
             let mut receiver = receiver;
             while let Some((message, recipient)) = receiver.recv().await {
                 let mut buf = BytesMut::with_capacity(1024);
+                // TODO: encrypt message
                 message.encode(&mut buf, None);
                 let buf = buf.to_vec();
                 // println!("Sending message to {recipient}");

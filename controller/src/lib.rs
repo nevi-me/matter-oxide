@@ -49,7 +49,7 @@ pub mod message;
 pub mod root_cert_manager;
 pub mod secure_channel;
 pub mod session_context;
-mod tlv;
+pub mod tlv;
 pub mod transport;
 pub mod util;
 

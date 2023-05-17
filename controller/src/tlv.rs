@@ -548,7 +548,7 @@ impl<'a> Tlv<'a> for TlvData<'a> {
 
 pub fn decode(data: &[u8]) -> TlvData {
     TlvData {
-        data: data,
+        data,
         index: 0,
         in_container: false,
     }

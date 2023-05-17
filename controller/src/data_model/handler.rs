@@ -3,17 +3,18 @@
 // of how to achieve some data structures in a no_std friendly manner.
 // I was struggling with avoiding <dyn Cluster> which would require boxing.
 
-// Stubs for now
-pub struct AttrDetails {
-    cluster_id: u16,
-    endpoint_id: u16,
-}
+use crate::{
+    interaction_model::{transaction::Transaction, AttributeDataIB, AttributePathIB},
+    tlv::Encoder,
+};
 
-pub struct AttrDataEncoder {}
+pub struct AttrDataEncoder<'a> {
+    pub writer: &'a mut Encoder,
+}
 
 pub struct TLVElement {}
 
-pub struct Transaction {}
+// pub struct Transaction {}
 
 pub struct CmdDetails {
     cluster_id: u16,
@@ -29,9 +30,11 @@ pub trait ChangeNotifier<T> {
 pub trait Handler {
     /// The type of cluster this handler is for. Can be server or client.
     const HANDLER_TYPE: HandlerType = HandlerType::Server;
-    fn handle_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder);
+    fn handle_read(&self, attr: &AttributePathIB, encoder: &mut AttrDataEncoder);
+    /// Experimenting with returning attribute data instead of encoding directly
+    fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB;
 
-    fn handle_write(&mut self, _attr: &AttrDetails, _data: &TLVElement) {
+    fn handle_write(&mut self, _attr: &AttributePathIB, _data: &TLVElement) {
         panic!("Attribute not found")
     }
 
@@ -46,11 +49,11 @@ pub trait Handler {
     }
 
     // Used for client interactions
-    fn do_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+    fn do_read(&self, attr: &AttributePathIB, encoder: AttrDataEncoder) {
         panic!("do_read should be used by clients")
     }
 
-    fn do_write(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+    fn do_write(&self, attr: &AttributePathIB, encoder: AttrDataEncoder) {
         panic!("do_write should be used by clients")
     }
 
@@ -76,11 +79,15 @@ impl<T> Handler for &mut T
 where
     T: Handler,
 {
-    fn handle_read<'a>(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
+    fn handle_read<'a>(&self, attr: &AttributePathIB, encoder: &mut AttrDataEncoder) {
         (**self).handle_read(attr, encoder)
     }
 
-    fn handle_write(&mut self, attr: &AttrDetails, data: &TLVElement) {
+    fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
+        panic!("handle_read2 not implemented")
+    }
+
+    fn handle_write(&mut self, attr: &AttributePathIB, data: &TLVElement) {
         (**self).handle_write(attr, data)
     }
 
@@ -118,8 +125,12 @@ impl EmptyHandler {
 }
 
 impl Handler for EmptyHandler {
-    fn handle_read(&self, _attr: &AttrDetails, _encoder: AttrDataEncoder) {
+    fn handle_read(&self, _attr: &AttributePathIB, encoder: &mut AttrDataEncoder) {
         panic!()
+    }
+
+    fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
+        panic!("handle_read2 not implemented")
     }
 }
 
@@ -159,16 +170,30 @@ where
     H: Handler,
     T: Handler,
 {
-    fn handle_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
-        if self.handler_endpoint == attr.endpoint_id && self.handler_cluster == attr.cluster_id {
+    fn handle_read(&self, attr: &AttributePathIB, encoder: &mut AttrDataEncoder) {
+        if Some(self.handler_endpoint) == attr.endpoint
+            && Some(self.handler_cluster) == attr.cluster
+        {
             self.handler.handle_read(attr, encoder)
         } else {
             self.next.handle_read(attr, encoder)
         }
     }
 
-    fn handle_write(&mut self, attr: &AttrDetails, data: &TLVElement) {
-        if self.handler_endpoint == attr.endpoint_id && self.handler_cluster == attr.cluster_id {
+    fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
+        if Some(self.handler_endpoint) == attr.endpoint
+            && Some(self.handler_cluster) == attr.cluster
+        {
+            self.handler.handle_read2(attr)
+        } else {
+            self.next.handle_read2(attr)
+        }
+    }
+
+    fn handle_write(&mut self, attr: &AttributePathIB, data: &TLVElement) {
+        if Some(self.handler_endpoint) == attr.endpoint
+            && Some(self.handler_cluster) == attr.cluster
+        {
             self.handler.handle_write(attr, data)
         } else {
             self.next.handle_write(attr, data)

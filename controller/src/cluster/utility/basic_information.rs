@@ -1,9 +1,12 @@
+use num::FromPrimitive;
+
 use crate::{
     cluster::{Cluster, ClusterClassification},
     data_model::{
-        handler::{AttrDataEncoder, AttrDetails, Handler},
+        handler::{AttrDataEncoder, Handler},
         Attribute,
     },
+    interaction_model::{AttributeDataIB, AttributePathIB},
     tlv::Encoder,
 };
 
@@ -78,6 +81,7 @@ pub const CLUSTER: Cluster<'static> = Cluster {
     ],
 };
 
+#[derive(FromPrimitive)]
 #[repr(u16)]
 enum Attributes {
     DataModelRevision = 0x0000,
@@ -126,11 +130,53 @@ impl<'a> BasicInformationCluster<'a> {
         }
     }
 
-    pub fn read(&self, attribute: AttrDetails, writer: &mut Encoder) {}
+    pub fn read(&self, attribute: &AttributePathIB) -> AttributeDataIB {
+        if let Some(path) = attribute.attribute {
+            // TODO: return error if attribute is unsupported
+            let path: Attributes = Attributes::from_u32(path).unwrap();
+            let mut encoder = Encoder::default();
+            match path {
+                Attributes::DataModelRevision => todo!(),
+                Attributes::VendorName => todo!(),
+                Attributes::VendorID => todo!(),
+                Attributes::ProductName => {
+                    let value =
+                        heapless::Vec::from_slice(self.info.product_name.as_bytes()).unwrap();
+                    encoder.write(
+                        crate::tlv::TlvType::String(
+                            crate::tlv::ElementSize::Byte1,
+                            self.info.product_name.len(),
+                        ),
+                        crate::tlv::TagControl::ContextSpecific(0),
+                        crate::tlv::TagLengthValue::String(value),
+                    )
+                }
+                Attributes::ProductID => todo!(),
+                Attributes::NodeLabel => todo!(),
+                Attributes::Location => todo!(),
+                Attributes::HardwareVersion => todo!(),
+                Attributes::HardwareVersionString => todo!(),
+                Attributes::SoftwareVersion => todo!(),
+                Attributes::SoftwareVersionString => todo!(),
+                Attributes::CapabilityMinima => todo!(),
+            };
+            AttributeDataIB {
+                data_version: self.data_version,
+                path: attribute.clone(),
+                data: encoder.inner(),
+            }
+        } else {
+            panic!()
+        }
+    }
 }
 
 impl<'a> Handler for BasicInformationCluster<'a> {
-    fn handle_read(&self, attr: &AttrDetails, encoder: AttrDataEncoder) {
-        todo!()
+    fn handle_read(&self, attr: &AttributePathIB, encoder: &mut AttrDataEncoder) {
+        // self.read(attr, encoder.writer)
+        panic!()
+    }
+    fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
+        self.read(attr)
     }
 }
