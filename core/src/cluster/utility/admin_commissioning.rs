@@ -99,7 +99,7 @@ impl Handler for AdminCommissioningCluster {
     }
 
     fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
-        panic!("handle_read2 not implemented")
+        panic!("handle_read2 not implemented for admin commissioning cluster")
     }
 
     fn handle_write(

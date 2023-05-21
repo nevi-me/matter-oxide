@@ -70,7 +70,6 @@ impl ReadRequestMessage {
                     }
                     TlvType::Array => todo!(),
                     TlvType::List if in_attribute_requests => {
-                        println!("Start of attribute requests");
                         element = element.next_in_container();
                         let (ib, e) = AttributePathIB::decode_inner(element);
                         attribute_requests.as_mut().unwrap().push(ib);
@@ -370,7 +369,7 @@ impl AttributePathIB {
             );
             match element.get_control() {
                 TagControl::Anonymous if element.get_type() == TlvType::EndOfContainer => {
-                    // element = element.next_in_container();
+                    element = element.next_in_container();
                     break;
                 }
                 TagControl::ContextSpecific(0) => {

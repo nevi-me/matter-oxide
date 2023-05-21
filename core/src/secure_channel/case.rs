@@ -1,4 +1,5 @@
 use crate::{
+    constants::CRYPTO_AEAD_MIC_LENGTH_BYTES,
     message::{Message, MessageHeader},
     session_context::SecureSessionContext,
 };
@@ -50,7 +51,7 @@ pub struct Sigma1 {
     pub initiator_eph_pubkey: [u8; 32],
     pub initiator_sed_params: Option<SedParameters>,
     pub resumption_id: Option<[u8; 16]>,
-    pub initiator_resume_mic: Option<[u8; 0]>, // TODO: CRYPTO_AEAD_MIC_LENGTH_BYTES
+    pub initiator_resume_mic: Option<[u8; CRYPTO_AEAD_MIC_LENGTH_BYTES]>,
 }
 pub struct Sigma2 {}
 pub struct Sigma2Resume {}

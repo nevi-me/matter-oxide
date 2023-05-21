@@ -181,7 +181,9 @@ where
     }
 
     fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
-        if Some(self.handler_endpoint) == attr.endpoint
+        dbg!(self.handler_endpoint, self.handler_cluster, &attr);
+        // TODO: how do we handle empty endpoints? Wildcards?
+        if self.handler_endpoint == attr.endpoint.unwrap_or_default()
             && Some(self.handler_cluster) == attr.cluster
         {
             self.handler.handle_read2(attr)

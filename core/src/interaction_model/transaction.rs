@@ -59,7 +59,10 @@ impl Transaction {
             InteractionModelProtocolOpCode::ReportData => todo!(),
             InteractionModelProtocolOpCode::WriteRequest => todo!(),
             InteractionModelProtocolOpCode::WriteResponse => todo!(),
-            InteractionModelProtocolOpCode::InvokeRequest => todo!(),
+            InteractionModelProtocolOpCode::InvokeRequest => {
+                // got here, next is to support arming fail-safe
+                panic!()
+            }
             InteractionModelProtocolOpCode::InvokeResponse => todo!(),
             InteractionModelProtocolOpCode::TimedRequest => todo!(),
         };
@@ -95,11 +98,15 @@ impl Transaction {
             integrity_check: None,
         };
 
+        dbg!(&message.message_header);
+        dbg!(&response_message.message_header);
+
         Some(response_message)
     }
 
     fn read_request(&mut self, message: &Message, handler: &impl Handler) -> Encoder {
         let read_request_message = ReadRequestMessage::from_tlv(&message.payload);
+        // dbg!(&read_request_message);
         // TODO: how do we handle multiple attribute reads?
         let mut writer = Encoder::default();
         let mut encoder = AttrDataEncoder {

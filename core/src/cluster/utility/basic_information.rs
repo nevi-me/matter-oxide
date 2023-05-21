@@ -138,7 +138,11 @@ impl<'a> BasicInformationCluster<'a> {
             match path {
                 Attributes::DataModelRevision => todo!(),
                 Attributes::VendorName => todo!(),
-                Attributes::VendorID => todo!(),
+                Attributes::VendorID => encoder.write(
+                    crate::tlv::TlvType::UnsignedInt(crate::tlv::ElementSize::Byte2),
+                    crate::tlv::TagControl::ContextSpecific(0),
+                    crate::tlv::TagLengthValue::Unsigned16(self.info.vendor_id),
+                ),
                 Attributes::ProductName => {
                     let value =
                         heapless::Vec::from_slice(self.info.product_name.as_bytes()).unwrap();
@@ -151,7 +155,11 @@ impl<'a> BasicInformationCluster<'a> {
                         crate::tlv::TagLengthValue::String(value),
                     )
                 }
-                Attributes::ProductID => todo!(),
+                Attributes::ProductID => encoder.write(
+                    crate::tlv::TlvType::UnsignedInt(crate::tlv::ElementSize::Byte2),
+                    crate::tlv::TagControl::ContextSpecific(0),
+                    crate::tlv::TagLengthValue::Unsigned16(self.info.product_id),
+                ),
                 Attributes::NodeLabel => todo!(),
                 Attributes::Location => todo!(),
                 Attributes::HardwareVersion => todo!(),

@@ -414,7 +414,7 @@ pub async fn commission_with_pin<'a>(
     Let's say we have the commissioning client, can we access it from here?
     Yes, we can access it. So let's create a client method and call it.
      */
-    controller.device.handler.next.handler.fail_safe();
+    controller.device.handler.next.next.handler.fail_safe();
 
     // ✅ Open PASE channel
     // ✅ PASE pairing to get a secured channel

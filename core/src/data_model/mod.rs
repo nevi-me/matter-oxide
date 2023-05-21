@@ -1,5 +1,7 @@
 //! Defines core types in the data model
 
+use crate::cluster::ATTR_FABRIC_INDEX;
+
 pub mod device;
 pub mod device_type;
 pub mod endpoint;
@@ -32,6 +34,16 @@ pub struct Attribute {
     pub id: u16,
     pub quality: (),
     pub access: (),
+}
+
+impl Attribute {
+    pub const fn is_system(&self) -> bool {
+        self.id >= ATTR_FABRIC_INDEX.id
+    }
+
+    pub const fn is_system_attr(id: u16) -> bool {
+        id >= ATTR_FABRIC_INDEX.id
+    }
 }
 
 pub enum AttributeValue {

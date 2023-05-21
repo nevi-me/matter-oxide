@@ -2,7 +2,9 @@
 
 use crate::{
     cluster::{
-        utility::{admin_commissioning, basic_information, general_commissioning},
+        utility::{
+            admin_commissioning, basic_information, general_commissioning, network_commissioning,
+        },
         Cluster,
     },
     data_model::handler::EmptyHandler,
@@ -13,7 +15,7 @@ pub type RootEndpointHandler<'a> = handler_chain_type!(
     // AccessControlCluster<'a>,
     // NocCluster<'a>,
     admin_commissioning::AdminCommissioningCluster,
-    // NwCommCluster,
+    network_commissioning::NetworkCommissioningCluster,
     general_commissioning::GeneralCommissioningCluster,
     basic_information::BasicInformationCluster<'a>
 );
@@ -48,14 +50,14 @@ pub fn wrap<'a>(
         )
         .chain(
             endpoint_id,
+            network_commissioning::CLUSTER.id,
+            network_commissioning::NetworkCommissioningCluster::new(),
+        )
+        .chain(
+            endpoint_id,
             admin_commissioning::CLUSTER.id,
             admin_commissioning::AdminCommissioningCluster::new(),
         )
-    // .chain(
-    //     endpoint_id,
-    //     nw_commissioning::CLUSTER.id,
-    //     NwCommCluster::new(rand),
-    // )
 
     // .chain(
     //     endpoint_id,

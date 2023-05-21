@@ -57,7 +57,7 @@ impl GeneralCommissioningCluster {
         Self {
             data_version: 1,
             fail_safe: AttributeBasicCommissioningInfo {
-                fail_safe_expiry_len_seconds: 60,
+                fail_safe_expiry_len_seconds: 120,
                 max_cum_fail_safe_seconds: 0,
             },
         }
@@ -67,8 +67,80 @@ impl GeneralCommissioningCluster {
         &self.fail_safe
     }
 
-    pub fn handle_read(&self, attr: AttributePathIB, encoder: &mut Encoder) {
-        todo!()
+    pub fn read(&self, attr: &AttributePathIB) -> AttributeDataIB {
+        if let Some(path) = attr.attribute {
+            // TODO: return error if attribute is unsupported
+            if Attribute::is_system_attr(path as u16) {
+                return CLUSTER.read(&attr);
+            }
+            let path: Attributes = Attributes::from_u32(path).unwrap();
+            let mut encoder = Encoder::default();
+            match path {
+                Attributes::Breadcrumb => {
+                    encoder.write(
+                        crate::tlv::TlvType::UnsignedInt(crate::tlv::ElementSize::Byte8),
+                        crate::tlv::TagControl::ContextSpecific(0),
+                        crate::tlv::TagLengthValue::Unsigned64(0), // TODO: shouldn't be hardcoded
+                    )
+                }
+                Attributes::BasicCommissioningInfo => {
+                    // TODO: implement to_tlv
+                    encoder.write(
+                        crate::tlv::TlvType::Structure,
+                        crate::tlv::TagControl::Anonymous,
+                        crate::tlv::TagLengthValue::Container,
+                    );
+                    encoder.write(
+                        crate::tlv::TlvType::UnsignedInt(crate::tlv::ElementSize::Byte2),
+                        crate::tlv::TagControl::ContextSpecific(0),
+                        crate::tlv::TagLengthValue::Unsigned16(
+                            self.fail_safe.fail_safe_expiry_len_seconds,
+                        ),
+                    );
+                    encoder.write(
+                        crate::tlv::TlvType::UnsignedInt(crate::tlv::ElementSize::Byte2),
+                        crate::tlv::TagControl::ContextSpecific(1),
+                        crate::tlv::TagLengthValue::Unsigned16(
+                            self.fail_safe.max_cum_fail_safe_seconds,
+                        ),
+                    );
+                    encoder.write(
+                        crate::tlv::TlvType::EndOfContainer,
+                        crate::tlv::TagControl::Anonymous,
+                        crate::tlv::TagLengthValue::EndOfContainer,
+                    );
+                }
+                Attributes::RegulatoryConfig => {
+                    // TODO: should be enum8
+                    encoder.write(
+                        crate::tlv::TlvType::UnsignedInt(crate::tlv::ElementSize::Byte1),
+                        crate::tlv::TagControl::ContextSpecific(0),
+                        crate::tlv::TagLengthValue::Unsigned8(
+                            0, // indoor
+                        ),
+                    );
+                }
+                Attributes::LocationCapability => {
+                    // TODO: should be enum8
+                    encoder.write(
+                        crate::tlv::TlvType::UnsignedInt(crate::tlv::ElementSize::Byte1),
+                        crate::tlv::TagControl::ContextSpecific(0),
+                        crate::tlv::TagLengthValue::Unsigned8(
+                            0, // indoor
+                        ),
+                    );
+                }
+                Attributes::SupportsConcurrentConnection => todo!(),
+            };
+            AttributeDataIB {
+                data_version: self.data_version,
+                path: attr.clone(),
+                data: encoder.inner(),
+                interaction_model_revision: 1,
+            }
+        } else {
+            panic!()
+        }
     }
 
     pub fn handle_invoke(
@@ -115,7 +187,7 @@ impl Handler for GeneralCommissioningCluster {
     }
 
     fn handle_read2(&self, attr: &AttributePathIB) -> AttributeDataIB {
-        panic!("handle_read2 not implemented")
+        self.read(attr)
     }
 
     fn handle_write(
