@@ -104,7 +104,11 @@ impl SessionContext {
     pub fn encryption_key(&self) -> Option<&[u8]> {
         match self {
             SessionContext::MCSP => None,
-            SessionContext::Secure(session) => Some(&session.encryption_key),
+            SessionContext::Secure(session) => match session.session_role {
+                // TODO: fix this at source
+                SessionRole::Initiator => Some(&session.encryption_key),
+                SessionRole::Responder => Some(&session.encryption_key),
+            },
             SessionContext::Unsecured(_) => None,
         }
     }

@@ -164,6 +164,7 @@ impl<'a> BasicInformationCluster<'a> {
                 data_version: self.data_version,
                 path: attribute.clone(),
                 data: encoder.inner(),
+                interaction_model_revision: 1,
             }
         } else {
             panic!()
