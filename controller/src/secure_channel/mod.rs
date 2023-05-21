@@ -74,7 +74,8 @@ impl SecureChannelManager {
                 let mut pase = PASEManager::responder(
                     passcode,
                     message.message_header.session_id,
-                    message.message_header.session_id,
+                    // message.message_header.session_id,
+                    1, // TODO: should not hardcode it
                     payload_header.exchange_id,
                     node_id,
                     message
@@ -117,7 +118,7 @@ impl SecureChannelManager {
                 let mut secured_session = SecureSessionContext::new_pase(
                     false,
                     false,
-                    session_context.local_session_id,
+                    self.pase.as_ref().unwrap().responder_session_id,
                     session_context.peer_session_id,
                     k_e,
                     &[],

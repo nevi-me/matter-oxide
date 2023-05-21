@@ -32,8 +32,8 @@ pub struct PASEManager {
     // This is also stored in the unsecured session context
     // at least as the peer. We can determine this with the
     // session_role there.
-    initiator_session_id: u16,
-    responder_session_id: u16,
+    pub initiator_session_id: u16,
+    pub responder_session_id: u16,
     exchange_id: u16,
     node_id: u64,
     peer_node_id: u64,
@@ -298,6 +298,8 @@ impl PASEManager {
         self.c_b = c_b;
         self.k_e = k_e;
 
+        println!("PAKE Finished ***********");
+
         Message::new(self.message_header(), Some(payload_header), encoded.inner())
     }
     pub fn pake_finished(&mut self, pake3: &Pake3) -> Message {
@@ -327,6 +329,8 @@ impl PASEManager {
         let mut payload = [0u8; 8];
         status_report.to_payload(&mut payload);
         let payload = heapless::Vec::from_slice(&payload).unwrap();
+
+        println!("PAKE Finished ---------------");
 
         // TODO: is header different?
         Message::new(self.message_header(), Some(payload_header), payload)
@@ -567,10 +571,9 @@ impl PBKDFParamResponse {
                 TagControl::ContextSpecific(2),
                 TagLengthValue::ByteString(heapless::Vec::from_slice(&params.salt).unwrap()),
             );
-            // TODO: The C++ implementation rejects this as invalid.
             encoder.write(
                 TlvType::EndOfContainer,
-                TagControl::ContextSpecific(3),
+                TagControl::Anonymous,
                 TagLengthValue::EndOfContainer,
             );
         }

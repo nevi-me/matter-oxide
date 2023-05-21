@@ -13,7 +13,7 @@ use matter_controller::{
         transaction::Transaction, InteractionModelProtocolOpCode, ReadRequestMessage,
         ReportDataMessage,
     },
-    message::{Message, ProtocolID},
+    message::{Message, ProtocolID, SessionType},
     tlv::Encoder,
     transport::{
         mdns::{DnsServiceMode, MdnsHandler},
@@ -106,7 +106,7 @@ async fn main() {
         let mut bytes = BytesMut::with_capacity(1024);
         while let Some(message) = message_receiver.recv_ref().await {
             println!("Received message from channel buffer, sending to peer");
-            println!("Sending message: {:?}", message.bytes.to_vec());
+            println!("Sending message: {:?}", hex::encode(&message.bytes));
             // Send the message to destination
             let address = message.recipient.as_ref().unwrap();
             send_socket
@@ -121,8 +121,9 @@ async fn main() {
             // TODO: use a buffer that we can allocate once
             let mut buf = [0u8; 1024];
             let (len, peer) = socket.recv_from(&mut buf).await.unwrap();
-            // println!("Received message {:?}", &buf[..len]);
+            println!("Received message {:?}", hex::encode(&buf[..len]));
             let mut message = Message::decode(&buf[..len]);
+            // println!("Decoded message: {:?}", message);
             // The message could be encrypted, it could be a new exchange etc.
             // Send it to the exchange manager to take action on it
             let action = end_device.exchange_manager.receive_message(&mut message);
@@ -146,12 +147,19 @@ async fn main() {
                         {
                             // Send a message by writing it directly to the channel buffer
                             let mut sender = end_device.message_sender.send_ref().await.unwrap();
+                            println!("Sender bytes: {}", hex::encode(&sender.bytes));
                             sender.recipient = Some(peer);
-                            let encryption_key = end_device
-                                .exchange_manager
-                                .session_context(message.message_header.session_id)
-                                .map(|s| s.encryption_key())
-                                .flatten();
+                            let encryption_key = if message.message_header.session_type
+                                == SessionType::UnsecuredSession
+                            {
+                                None
+                            } else {
+                                end_device
+                                    .exchange_manager
+                                    .session_context(message.message_header.session_id)
+                                    .map(|s| s.encryption_key())
+                                    .flatten()
+                            };
                             ack_message.encode(&mut sender.bytes, encryption_key);
                         }
                     }
@@ -171,7 +179,7 @@ async fn main() {
                     exchange.next_message_counter()
                 }
             };
-            match protocol_id {
+            let mut response_message = match protocol_id {
                 ProtocolID::SecureChannel => {
                     // Send the message to the secure channel manager
                     let session_context = end_device
@@ -182,28 +190,17 @@ async fn main() {
                         .on_message(session_context, &message);
 
                     // If no message, don't do anything further
-                    let Some(mut response_message) = response_message else {
+                    let Some(response_message) = response_message else {
                         continue;
                     };
-
-                    // Add acknowledgement
-                    response_message.with_ack(next_ack);
-                    response_message.message_header.message_counter = next_message_counter;
-
-                    {
-                        // Send a message by writing it directly to the channel buffer
-                        let mut sender = end_device.message_sender.send_ref().await.unwrap();
-                        sender.recipient = Some(peer);
-                        let encryption_key = maybe_session.as_ref().map(|s| &s.encryption_key[..]);
-
-                        response_message.encode(&mut sender.bytes, encryption_key);
-                    }
 
                     if let Some(session) = maybe_session {
                         end_device.exchange_manager.add_session(
                             matter_controller::session_context::SessionContext::Secure(session),
                         );
                     }
+
+                    response_message
                 }
                 ProtocolID::InteractionModel => {
                     // dbg!((&message.message_header, &payload_header));
@@ -217,21 +214,11 @@ async fn main() {
                         transaction.on_message(session_context, &handler(&device_info), &message);
 
                     // If no message, don't do anything further
-                    let Some(mut response_message) = response_message else {
+                    let Some(response_message) = response_message else {
                         continue;
                     };
 
-                    // Add acknowledgement
-                    response_message.with_ack(next_ack);
-                    response_message.message_header.message_counter = next_message_counter;
-
-                    {
-                        // Send a message by writing it directly to the channel buffer
-                        let mut sender = end_device.message_sender.send_ref().await.unwrap();
-                        sender.recipient = Some(peer);
-                        let encryption_key = session_context.encryption_key();
-                        response_message.encode(&mut sender.bytes, encryption_key);
-                    }
+                    response_message
                 }
                 ProtocolID::UserDirectedComm => {
                     todo!()
@@ -242,6 +229,28 @@ async fn main() {
                 ProtocolID::ForTesting => {
                     todo!()
                 }
+            };
+
+            // Add acknowledgement
+            response_message.with_ack(next_ack);
+            response_message.message_header.message_counter = next_message_counter;
+
+            {
+                // Send a message by writing it directly to the channel buffer
+                let mut sender = end_device.message_sender.send_ref().await.unwrap();
+                sender.recipient = Some(peer);
+                // TODO: re-enable encryption once it's clear when it's used & when not
+                let encryption_key =
+                    if message.message_header.session_type == SessionType::UnsecuredSession {
+                        None
+                    } else {
+                        end_device
+                            .exchange_manager
+                            .session_context(message.message_header.session_id)
+                            .map(|s| s.encryption_key())
+                            .flatten()
+                    };
+                response_message.encode(&mut sender.bytes, encryption_key);
             }
         }
     });

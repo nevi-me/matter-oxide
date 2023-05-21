@@ -242,13 +242,16 @@ impl Message {
     pub fn encode(&self, out: &mut BytesMut, encryption_key: Option<&[u8]>) {
         self.message_header.encode(out);
         let message_header_len = out.len();
-        self.payload_header.as_ref().unwrap().encode(out);
-        out.put_slice(&self.payload);
-        let payload_len = out.len() - message_header_len;
+        let mut payload_out = BytesMut::with_capacity(1024);
+        self.payload_header
+            .as_ref()
+            .unwrap()
+            .encode(&mut payload_out);
+        payload_out.put_slice(&self.payload);
+        let payload_len = payload_out.len();
 
         // Handle encryption if applicable
         if let Some(encryption_key) = encryption_key {
-            let (message_header, mut payload) = out.split_at_mut(message_header_len);
             let mut nonce: heapless::Vec<u8, CRYPTO_AEAD_NONCE_LENGTH_BYTES> = heapless::Vec::new();
             nonce
                 .push(self.message_header.security_flags.bits())
@@ -264,16 +267,19 @@ impl Message {
             );
 
             // Cipher Text
-            let tag_space = [0u8; CRYPTO_AEAD_MIC_LENGTH_BYTES];
-            payload.put(&tag_space[..]);
-            encrypt_in_place(
+            // let tag_space = [2u8; CRYPTO_AEAD_MIC_LENGTH_BYTES];
+            payload_out.put_bytes(0, CRYPTO_AEAD_MIC_LENGTH_BYTES);
+            let encrypted_len = encrypt_in_place(
                 encryption_key,
                 nonce.as_slice(),
-                message_header,
-                payload,
+                &out,
+                &mut payload_out,
                 payload_len,
             );
+            payload_out.resize(encrypted_len, 0);
         }
+
+        out.extend_from_slice(&payload_out);
     }
 
     /// Add an acknowledgement to the message. Useful to add after consruction.
@@ -298,8 +304,6 @@ impl Message {
             None
         }
     }
-
-    fn encrypt_in_place(&mut self) {}
 }
 
 #[derive(Default, Debug, Clone)] // For testing only
@@ -521,6 +525,39 @@ mod tests {
         let buf = [
             4, 0, 0, 0, 11, 57, 253, 93, 0, 221, 54, 23, 63, 11, 59, 187, 3, 16, 19, 17, 0, 0, 198,
             191, 106, 129,
+        ];
+        let mut message = Message::decode(&buf);
+        message.decrypt(None);
+        // message.decrypt(Some(&[
+        //     77, 78, 236, 186, 38, 33, 108, 189, 52, 74, 213, 94, 170, 213, 56, 123,
+        // ]));
+        dbg!(message);
+    }
+
+    #[test]
+    fn test_decode_6() {
+        let buf = [
+            1, 0, 0, 0, 141, 50, 186, 13, 147, 2, 236, 155, 9, 141, 93, 78, 6, 64, 123, 198, 0, 0,
+            193, 195, 101, 9, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let mut message = Message::decode(&buf);
+        message.decrypt(None);
+        // message.decrypt(Some(&[
+        //     77, 78, 236, 186, 38, 33, 108, 189, 52, 74, 213, 94, 170, 213, 56, 123,
+        // ]));
+        dbg!(message);
+    }
+
+    #[test]
+    fn test_decode_7() {
+        let buf = [
+            0, 1, 0, 0, 87, 127, 85, 9, 76, 56, 114, 20, 62, 153, 5, 36, 147, 50, 128, 94, 169, 52,
+            229, 80, 20, 56, 27, 84, 254, 221, 67, 129, 168, 131, 176, 149, 134, 202, 96, 220, 226,
+            131, 55, 250, 195, 13, 208, 255, 160, 27, 194, 17, 6, 58, 145, 15, 100, 42, 154, 178,
+            222, 224, 38, 240, 109, 237, 93, 186, 23, 128, 137, 152, 33, 158, 19, 134, 63, 166, 45,
+            69, 151, 111, 210, 166, 167, 40, 39, 136, 242, 100, 132, 128, 26, 119, 240, 84, 236,
+            160, 155, 63, 185, 166, 137, 110, 54, 198, 227, 122, 101, 108, 47, 2, 202, 207, 175,
+            200, 108, 92, 213, 196, 25, 176, 63,
         ];
         let mut message = Message::decode(&buf);
         message.decrypt(None);

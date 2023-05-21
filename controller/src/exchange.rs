@@ -163,14 +163,10 @@ impl ExchangeManager {
             }
         };
         let session_id = message.message_header.session_id;
-        self.session_context(session_id);
         // TODO: There can be > 1 key for group messages
         match self.session_manager.get_session(session_id) {
             Some(SessionContext::MCSP) => todo!("MCSP sessions not supported"),
             Some(SessionContext::Secure(session)) => {
-                if header.security_flags.contains(SecurityFlags::PRIVACY) {
-                    // TODO: privacy processing
-                }
                 message.decrypt(Some(&session.decryption_key[..]));
             }
             Some(SessionContext::Unsecured(_)) | None => {
@@ -229,12 +225,17 @@ impl ExchangeManager {
                 // Unsolicited message (4.9.5.2)
                 // TODO: Should not have a duplicate counter
                 // TODO: has to have a registered protocol ID
+                // println!("Processing unsolicited message {:#?}", message);
                 assert!(payload_header.protocol_id < 0x0005);
-                println!("Processing unsolicited message {:#?}", message);
                 // A session ID might already exist, find one first
                 // TODO: validate this before creating a new session (e.g. can't hijack existing session)
                 match self.session_context(message.message_header.session_id) {
-                    Some(_) => {
+                    Some(session) => {
+                        // Log some data to capture encryption inputs
+                        let SessionContext::Secure(context) = &session else {
+                            todo!();
+                        };
+
                         // Create a new exchange with the session
                         self.new_responder_exchange(message);
                     }

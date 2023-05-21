@@ -70,6 +70,7 @@ impl ReadRequestMessage {
                     }
                     TlvType::Array => todo!(),
                     TlvType::List if in_attribute_requests => {
+                        println!("Start of attribute requests");
                         element = element.next_in_container();
                         let (ib, e) = AttributePathIB::decode_inner(element);
                         attribute_requests.as_mut().unwrap().push(ib);
@@ -86,7 +87,8 @@ impl ReadRequestMessage {
                     t => todo!("Unsupported anonymous tag {t:?}"),
                 },
                 TagControl::ContextSpecific(0) => {
-                    if let TagLengthValue::Container = element.get_value() {
+                    // TODO: should also be an array
+                    if let TlvType::Array = element.get_type() {
                         in_attribute_requests = true;
                         attribute_requests = Some(vec![]);
                     }
@@ -157,13 +159,14 @@ impl ReportDataMessage {
             );
         }
         if let Some(reports) = &self.attribute_reports {
-            // encoder.write(
-            //     TlvType::Structure,
-            //     TagControl::ContextSpecific(1),
-            //     TagLengthValue::Container,
-            // );
             encoder.write(
                 TlvType::Array,
+                TagControl::ContextSpecific(1),
+                TagLengthValue::Container,
+            );
+
+            encoder.write(
+                TlvType::Structure,
                 TagControl::Anonymous,
                 TagLengthValue::Container,
             );
@@ -173,13 +176,14 @@ impl ReportDataMessage {
             encoder.write(
                 TlvType::EndOfContainer,
                 TagControl::Anonymous,
-                TagLengthValue::Container,
+                TagLengthValue::EndOfContainer,
             );
-            // encoder.write(
-            //     TlvType::EndOfContainer,
-            //     TagControl::Anonymous,
-            //     TagLengthValue::Container,
-            // );
+
+            encoder.write(
+                TlvType::EndOfContainer,
+                TagControl::Anonymous,
+                TagLengthValue::EndOfContainer,
+            );
         }
         if let Some(reports) = &self.event_reports {
             todo!("Event reports not yet supported");
@@ -202,7 +206,7 @@ impl ReportDataMessage {
         encoder.write(
             TlvType::EndOfContainer,
             TagControl::Anonymous,
-            TagLengthValue::Container,
+            TagLengthValue::EndOfContainer,
         );
     }
     // pub fn from_tlv(data: &[u8]) -> Self {
@@ -345,6 +349,12 @@ impl AttributePathIB {
                 TagLengthValue::Unsigned16(value),
             );
         }
+        // -
+        encoder.write(
+            TlvType::UnsignedInt(ElementSize::Byte1),
+            TagControl::ContextSpecific(255),
+            TagLengthValue::Unsigned8(1),
+        );
     }
     fn decode_inner(tlv: TlvData) -> (Self, TlvData) {
         let mut ib = Self {
@@ -430,26 +440,28 @@ pub struct DataVersionFilterIB {
     pub data_version: u32,
 }
 
+/// 10.5.4
 pub struct AttributeDataIB {
     pub data_version: u32,
     pub path: AttributePathIB,
     pub data: heapless::Vec<u8, 1024>, // TODO: what's a good representation?
+    pub interaction_model_revision: u8,
 }
 
 impl AttributeDataIB {
     pub fn to_tlv(&self, encoder: &mut Encoder) {
-        encoder.write(
-            TlvType::Structure,
-            TagControl::Anonymous,
-            TagLengthValue::Container,
-        );
+        // encoder.write(
+        //     TlvType::Structure,
+        //     TagControl::ContextSpecific(0),
+        //     TagLengthValue::Container,
+        // );
         encoder.write(
             TlvType::UnsignedInt(ElementSize::Byte4),
             TagControl::ContextSpecific(0),
             TagLengthValue::Unsigned32(self.data_version),
         );
         encoder.write(
-            TlvType::Structure,
+            TlvType::List,
             TagControl::ContextSpecific(1),
             TagLengthValue::Container,
         );
@@ -457,20 +469,26 @@ impl AttributeDataIB {
         encoder.write(
             TlvType::EndOfContainer,
             TagControl::ContextSpecific(1),
-            TagLengthValue::Container,
+            TagLengthValue::EndOfContainer,
         );
-        let data = heapless::Vec::from_slice(self.data.as_slice()).unwrap();
 
+        let data = heapless::Vec::from_slice(self.data.as_slice()).unwrap();
         encoder.write(
             // TODO: optimise length
             TlvType::ByteString(ElementSize::Byte2, self.data.len()),
             TagControl::ContextSpecific(2),
             TagLengthValue::ByteString(data),
         );
+        // --
+        // encoder.write(
+        //     TlvType::UnsignedInt(ElementSize::Byte1),
+        //     TagControl::ContextSpecific(255),
+        //     TagLengthValue::Unsigned8(1),
+        // );
         encoder.write(
             TlvType::EndOfContainer,
             TagControl::Anonymous,
-            TagLengthValue::Container,
+            TagLengthValue::EndOfContainer,
         );
     }
 }
@@ -482,26 +500,98 @@ pub struct AttributeReportIB {
 
 impl AttributeReportIB {
     pub fn to_tlv(&self, encoder: &mut Encoder) {
+        // encoder.write(
+        //     TlvType::Structure,
+        //     TagControl::Anonymous,
+        //     TagLengthValue::Container,
+        // );
         encoder.write(
             TlvType::Structure,
             TagControl::ContextSpecific(0),
             TagLengthValue::Container,
         );
         self.attribute_status.to_tlv(encoder);
-        self.attribute_data.to_tlv(encoder);
-
         encoder.write(
             TlvType::EndOfContainer,
             TagControl::Anonymous,
+            TagLengthValue::EndOfContainer,
+        );
+
+        encoder.write(
+            TlvType::Structure,
+            TagControl::ContextSpecific(1),
             TagLengthValue::Container,
         );
+        self.attribute_data.to_tlv(encoder);
+        encoder.write(
+            TlvType::EndOfContainer,
+            TagControl::Anonymous,
+            TagLengthValue::EndOfContainer,
+        );
+
+        // ---
+        encoder.write(
+            TlvType::UnsignedInt(ElementSize::Byte1),
+            TagControl::ContextSpecific(255),
+            TagLengthValue::Unsigned8(1),
+        );
+
+        // encoder.write(
+        //     TlvType::EndOfContainer,
+        //     TagControl::Anonymous,
+        //     TagLengthValue::EndOfContainer,
+        // );
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct EventFilterIB {
     pub node: Option<u64>,
     pub event_min: u64,
+}
+
+impl EventFilterIB {
+    fn decode_inner(tlv: TlvData) -> (Self, TlvData) {
+        let mut ib = Self {
+            ..Default::default()
+        };
+        let mut element = tlv;
+        loop {
+            println!(
+                "EventFilterIB Element {:?}, {:?}, {:?}",
+                element.get_control(),
+                element.get_type(),
+                element.get_value()
+            );
+            match element.get_control() {
+                TagControl::Anonymous if element.get_type() == TlvType::EndOfContainer => {
+                    // element = element.next_in_container();
+                    break;
+                }
+                // TagControl::ContextSpecific(0) => {
+                //     if let TagLengthValue::Boolean(value) = element.get_value() {
+                //         ib.enable_tag_compression = Some(value);
+                //     } else {
+                //         panic!("Invalid value")
+                //     }
+                // }
+                // TagControl::ContextSpecific(1) => {
+                //     if let TagLengthValue::Unsigned64(value) = element.get_value() {
+                //         ib.node = Some(value);
+                //     } else {
+                //         panic!("Invalid value")
+                //     }
+                // }
+                t => todo!("{t:?} not covered"),
+            }
+
+            if element.is_last() {
+                break;
+            }
+            element = element.next_in_container();
+        }
+        (ib, element)
+    }
 }
 
 #[derive(Debug)]
@@ -573,7 +663,31 @@ pub struct AttributeStatusIB {
 }
 
 impl AttributeStatusIB {
-    pub fn to_tlv(&self, encoder: &mut Encoder) {}
+    pub fn to_tlv(&self, encoder: &mut Encoder) {
+        encoder.write(
+            TlvType::List,
+            TagControl::ContextSpecific(0),
+            TagLengthValue::Container,
+        );
+        self.path.to_tlv(encoder);
+        encoder.write(
+            TlvType::EndOfContainer,
+            TagControl::Anonymous,
+            TagLengthValue::EndOfContainer,
+        );
+
+        encoder.write(
+            TlvType::Structure,
+            TagControl::ContextSpecific(1),
+            TagLengthValue::Container,
+        );
+        self.status.to_tlv(encoder);
+        encoder.write(
+            TlvType::EndOfContainer,
+            TagControl::Anonymous,
+            TagLengthValue::EndOfContainer,
+        );
+    }
 }
 
 #[derive(Default)]
@@ -583,6 +697,18 @@ pub struct StatusIB {
 }
 
 impl StatusIB {
+    pub fn to_tlv(&self, encoder: &mut Encoder) {
+        encoder.write(
+            TlvType::UnsignedInt(ElementSize::Byte2),
+            TagControl::ContextSpecific(0),
+            TagLengthValue::Unsigned16(self.status),
+        );
+        encoder.write(
+            TlvType::UnsignedInt(ElementSize::Byte2),
+            TagControl::ContextSpecific(1),
+            TagLengthValue::Unsigned16(self.cluster_status),
+        );
+    }
     fn decode_inner(tlv: TlvData) -> (Self, TlvData) {
         let mut ib = Self {
             ..Default::default()

@@ -72,6 +72,7 @@ impl Transaction {
         let response_message = Message {
             message_header: MessageHeader {
                 session_type: message_header.session_type.clone(),
+                // session_type: crate::message::SessionType::SecureUnicast(message_header.session_id),
                 message_flags: message_header.message_flags.clone(),
                 session_id: message_header.session_id,
                 security_flags: message_header.security_flags.clone(),
